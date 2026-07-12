@@ -1,0 +1,6 @@
+{
+  "name": "NEET PYQ Practice Platform",
+  "description": "A complete production-ready practice platform for NEET Previous Year Questions (PYQs), featuring simulated practice tests, bookmarks, advanced filters, and a real-time exam dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
