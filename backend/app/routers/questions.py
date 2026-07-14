@@ -3,7 +3,13 @@ from supabase import create_client, Client
 from typing import List, Optional
 import random
 from app.config import settings
-from app.schemas.question import QuestionResponse, PaginatedQuestions
+from app.schemas.question import (
+    QuestionResponse, 
+    PaginatedQuestions, 
+    SubjectsResponse, 
+    ChaptersResponse, 
+    TestQuestionsResponse
+)
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -21,7 +27,7 @@ async def get_questions(
     db: Client = Depends(get_supabase)
 ):
     query = db.table("questions").select("*", count="exact")
-    
+   
     if year:
         query = query.eq("year", year)
     if subject:
@@ -47,9 +53,8 @@ async def get_questions(
         "totalPages": total_pages
     }
 
-@router.get("/random-test", response_model=List[QuestionResponse])
+@router.get("/random-test", response_model=TestQuestionsResponse)
 async def get_random_test(db: Client = Depends(get_supabase)):
-    # Efficient: Fetch all IDs, select 180 randomly, then load details
     id_res = db.table("questions").select("id").execute()
     if not id_res.data or len(id_res.data) < 180:
         raise HTTPException(
@@ -64,28 +69,28 @@ async def get_random_test(db: Client = Depends(get_supabase)):
     shuffled_questions = questions_res.data
     random.shuffle(shuffled_questions)
     
-    return shuffled_questions
+    return {"questions": shuffled_questions}
 
-@router.get("/subjects", response_model=List[str])
+@router.get("/subjects", response_model=SubjectsResponse)
 async def get_subjects(db: Client = Depends(get_supabase)):
     try:
-        # Call custom RPC helper if defined
         res = db.rpc("get_unique_subjects", {}).execute()
-        return res.data
+        return {"subjects": res.data}
     except Exception:
-        # Fallback raw list query
         res = db.table("questions").select("subject").execute()
-        return list(set([record["subject"] for record in res.data if record.get("subject")]))
+        unique_subs = list(set([record["subject"] for record in res.data if record.get("subject")]))
+        return {"subjects": unique_subs}
 
-@router.get("/chapters", response_model=List[str])
+@router.get("/chapters", response_model=ChaptersResponse)
 async def get_chapters(subject: Optional[str] = Query(None), db: Client = Depends(get_supabase)):
     query = db.table("questions").select("chapter")
     if subject:
         query = query.eq("subject", subject)
     res = query.execute()
-    return list(set([record["chapter"] for record in res.data if record.get("chapter")]))
+    unique_chaps = list(set([record["chapter"] for record in res.data if record.get("chapter")]))
+    return {"chapters": unique_chaps}
 
-@router.get("/{year}", response_model=List[QuestionResponse])
+@router.get("/{year}", response_model=TestQuestionsResponse)
 async def get_year_questions(year: int, db: Client = Depends(get_supabase)):
     if year < 2020 or year > 2025:
         raise HTTPException(
@@ -93,7 +98,7 @@ async def get_year_questions(year: int, db: Client = Depends(get_supabase)):
             detail="Invalid year. Papers are only available for 2020-2025"
         )
     res = db.table("questions").select("*").eq("year", year).order("question_number", desc=False).execute()
-    return res.data
+    return {"questions": res.data}
 
 @router.get("/question/{id}", response_model=QuestionResponse)
 async def get_single_question(id: str, db: Client = Depends(get_supabase)):

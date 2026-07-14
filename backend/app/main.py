@@ -9,10 +9,8 @@ from slowapi.errors import RateLimitExceeded
 from app.config import settings
 from app.routers import auth, questions, bookmarks
 
-# SlowAPI Limiter Setup
 limiter = Limiter(key_func=get_remote_address)
 
-# Swagger and Doc setup based on Environment
 app_kwargs = {}
 if settings.ENV == "production":
     app_kwargs["openapi_url"] = None
@@ -26,13 +24,9 @@ app = FastAPI(
     **app_kwargs
 )
 
-# Attach Limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# -------------------------------------------------------------------------
-# 1. Custom Middleware for Security Headers (Added FIRST)
-# -------------------------------------------------------------------------
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -40,15 +34,9 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    # Removed backend-blocking Content-Security-Policy header
     return response
 
-# -------------------------------------------------------------------------
-# 2. CORS Middleware Configuration (Added LAST, so it executes FIRST)
-# -------------------------------------------------------------------------
-origins = [
-    "https://neet-pyq-practice-platform.web.app",  # Production Frontend
-]
+origins = ["https://neet-pyq-practice-platform.web.app"]
 
 if settings.ENV != "production":
     origins.append("*")
@@ -63,9 +51,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -------------------------------------------------------------------------
-# 3. Centralized Exception Handler (With Manual CORS Fallback)
-# -------------------------------------------------------------------------
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     detail = "An unexpected error occurred. Please try again."
@@ -77,7 +62,6 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"error": detail}
     )
     
-    # Manually append CORS headers on 500 crashes so Chrome doesn't block the traceback
     origin = request.headers.get("origin")
     if origin and (origin in origins or "*" in origins):
         response.headers["Access-Control-Allow-Origin"] = origin
@@ -85,7 +69,6 @@ async def global_exception_handler(request: Request, exc: Exception):
         
     return response
 
-# Include Routers
 app.include_router(auth.router, prefix="/api")
 app.include_router(questions.router, prefix="/api")
 app.include_router(bookmarks.router, prefix="/api")

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List, Optional
 
 class QuestionResponse(BaseModel):
@@ -21,3 +21,13 @@ class PaginatedQuestions(BaseModel):
     page: int
     pageSize: int
     totalPages: int
+
+# New schema wrappers to align perfectly with frontend object keys
+class SubjectsResponse(BaseModel):
+    subjects: List[str]
+
+class ChaptersResponse(BaseModel):
+    chapters: List[str]
+
+class TestQuestionsResponse(BaseModel):
+    questions: List[QuestionResponse]
