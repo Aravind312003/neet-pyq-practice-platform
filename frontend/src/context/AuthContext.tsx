@@ -63,14 +63,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const handleRefresh = async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/refresh`, { method: 'POST' });
+      // credentials: 'include' is required to send and receive HttpOnly cookies cross-origin
+      const res = await fetch(`${BACKEND_URL}/api/auth/refresh`, { 
+        method: 'POST',
+        credentials: 'include' 
+      });
       const contentType = res.headers.get("content-type");
 
       if (res.ok && contentType && contentType.includes("application/json")) {
         const data = await res.json();
         setToken(data.accessToken);
         
-        // Fetch user info
+        // Fetch user info using the new access token
         const meRes = await fetch(`${BACKEND_URL}/api/auth/me`, {
           headers: { 'Authorization': `Bearer ${data.accessToken}` }
         });
@@ -86,19 +90,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Clear stale local info if session recovery is not valid
         localStorage.removeItem('neet_access_token');
         localStorage.removeItem('neet_user');
+        setToken(null);
+        setUser(null);
       }
     } catch (err) {
       console.warn('Refresh token attempt failed:', err);
+      localStorage.removeItem('neet_access_token');
+      localStorage.removeItem('neet_user');
+      setToken(null);
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
   };
 
   const login = async (email: string, password: string) => {
+    // credentials: 'include' allows the backend to set the HTTPOnly cookie in the browser
     const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
+      credentials: 'include'
     });
 
     const contentType = response.headers.get("content-type");
@@ -139,7 +151,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
-      await fetch(`${BACKEND_URL}/api/auth/logout`, { method: 'POST' });
+      await fetch(`${BACKEND_URL}/api/auth/logout`, { 
+        method: 'POST',
+        credentials: 'include'
+      });
     } catch (err) {
       console.warn('Logout request failed:', err);
     } finally {
