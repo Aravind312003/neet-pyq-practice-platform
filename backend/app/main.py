@@ -30,15 +30,29 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS Middleware Configuration
+# -------------------------------------------------------------------------
+# 1. Custom Middleware for Security Headers (Added FIRST)
+# -------------------------------------------------------------------------
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # Removed backend-blocking Content-Security-Policy header
+    return response
+
+# -------------------------------------------------------------------------
+# 2. CORS Middleware Configuration (Added LAST, so it executes FIRST)
+# -------------------------------------------------------------------------
 origins = [
-    "https://neet-pyq-practice-platform.web.app",  # Allowed production Firebase URL
+    "https://neet-pyq-practice-platform.web.app",  # Production Frontend
 ]
 
 if settings.ENV != "production":
     origins.append("*")
 else:
-    # Restrict to configured production URL or fallback
     origins.append(os.getenv("APP_URL", "https://localhost:3000"))
 
 app.add_middleware(
@@ -49,35 +63,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Custom Middleware for Security Headers
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    
-    # Updated Content-Security-Policy to allow requests to your Render backend API
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        "connect-src 'self' https://neet-pyq-practice-platform.onrender.com; "
-        "frame-ancestors 'none';"
-    )
-    return response
-
-# Centralized Exception Handler
+# -------------------------------------------------------------------------
+# 3. Centralized Exception Handler (With Manual CORS Fallback)
+# -------------------------------------------------------------------------
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    # Hide traceback in production
     detail = "An unexpected error occurred. Please try again."
     if settings.ENV != "production":
         detail = str(exc)
         
-    return JSONResponse(
+    response = JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"error": detail}
     )
+    
+    # Manually append CORS headers on 500 crashes so Chrome doesn't block the traceback
+    origin = request.headers.get("origin")
+    if origin and (origin in origins or "*" in origins):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        
+    return response
 
 # Include Routers
 app.include_router(auth.router, prefix="/api")
