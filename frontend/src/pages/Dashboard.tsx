@@ -7,7 +7,6 @@ import {
 import Toast, { ToastType } from '../components/Toast';
 import { Question } from '../types';
 
-// Pointing directly to your live Render backend
 const API_BASE = 'https://neet-pyq-practice-platform.onrender.com/api';
 
 const Dashboard: React.FC = () => {
@@ -22,7 +21,6 @@ const Dashboard: React.FC = () => {
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedChapter, setSelectedChapter] = useState('');
   const [selectedYear, setSelectedYear] = useState('');
-
   const [subjectsList, setSubjectsList] = useState<string[]>(['Biology', 'Chemistry', 'Physics']);
   const [chaptersList, setChaptersList] = useState<string[]>([]);
   const [yearsList] = useState<number[]>([2025, 2024, 2023, 2022, 2021, 2020]);
@@ -97,7 +95,9 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const fetchChapters = async () => {
       try {
-        const url = selectedSubject ? `${API_BASE}/questions/chapters?subject=${encodeURIComponent(selectedSubject)}` : `${API_BASE}/questions/chapters`;
+        const url = selectedSubject 
+          ? `${API_BASE}/questions/chapters?subject=${encodeURIComponent(selectedSubject)}` 
+          : `${API_BASE}/questions/chapters`;
         const chapRes = await fetch(url);
         if (chapRes.ok) {
           const chapData = await chapRes.json();

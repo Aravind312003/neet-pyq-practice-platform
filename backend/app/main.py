@@ -66,9 +66,10 @@ async def global_exception_handler(request: Request, exc: Exception):
     if origin and (origin in origins or "*" in origins):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
-        
+         
     return response
 
+# Standardized API Prefix Routing Configuration
 app.include_router(auth.router, prefix="/api")
 app.include_router(questions.router, prefix="/api")
 app.include_router(bookmarks.router, prefix="/api")
