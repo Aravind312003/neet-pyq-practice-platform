@@ -31,7 +31,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(JSON.parse(storedUser));
         setIsLoading(false);
         
-        // Quietly verify token on backend or refresh it
         try {
           const res = await fetch(`${BACKEND_URL}/api/auth/me`, {
             headers: { 'Authorization': `Bearer ${storedToken}` }
@@ -39,13 +38,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           const contentType = res.headers.get("content-type");
 
-          // Ensure backend actually returned JSON, not an HTML error/sleeping page!
           if (res.ok && contentType && contentType.includes("application/json")) {
             const data = await res.json();
-            setUser(data); // The me endpoint returns user details directly
+            setUser(data);
             localStorage.setItem('neet_user', JSON.stringify(data));
           } else {
-            // Token might be expired or server returned bad content, try refreshing
             await handleRefresh();
           }
         } catch (err) {
@@ -53,7 +50,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await handleRefresh();
         }
       } else {
-        // No local token, try refreshing using the HttpOnly cookie
         await handleRefresh();
       }
     };
@@ -63,7 +59,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const handleRefresh = async () => {
     try {
-      // credentials: 'include' is required to send and receive HttpOnly cookies cross-origin
       const res = await fetch(`${BACKEND_URL}/api/auth/refresh`, { 
         method: 'POST',
         credentials: 'include' 
@@ -74,7 +69,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const data = await res.json();
         setToken(data.accessToken);
         
-        // Fetch user info using the new access token
         const meRes = await fetch(`${BACKEND_URL}/api/auth/me`, {
           headers: { 'Authorization': `Bearer ${data.accessToken}` }
         });
@@ -87,7 +81,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.setItem('neet_user', JSON.stringify(meData));
         }
       } else {
-        // Clear stale local info if session recovery is not valid
         localStorage.removeItem('neet_access_token');
         localStorage.removeItem('neet_user');
         setToken(null);
@@ -105,7 +98,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = async (email: string, password: string) => {
-    // credentials: 'include' allows the backend to set the HTTPOnly cookie in the browser
     const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -115,12 +107,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const contentType = response.headers.get("content-type");
     if (!contentType || !contentType.includes("application/json")) {
-      throw new Error('Server returned an invalid response. Please try again in a moment.');
+      throw new Error('Server returned an invalid response. Please try again.');
     }
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.error || 'Failed to sign in.');
+      throw new Error(data.error || data.detail || 'Failed to sign in.');
     }
 
     setToken(data.accessToken);
@@ -139,12 +131,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const contentType = response.headers.get("content-type");
     if (!contentType || !contentType.includes("application/json")) {
-      throw new Error('Server is currently sleeping. Please wait 30 seconds and try again.');
+      throw new Error('Server is currently sleeping or returned invalid content. Please try again.');
     }
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.detail || 'Failed to sign up.');
+      // 💡 Enhanced to expose the exact database error string from FastAPI
+      throw new Error(data.detail || data.error || 'Failed to sign up.');
     }
     return data;
   };
