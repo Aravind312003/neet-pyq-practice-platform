@@ -12,8 +12,13 @@ def get_supabase() -> Client:
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def signup(user_data: UserSignup, db: Client = Depends(get_supabase)):
-    password_hash = hash_password(user_data.password)
-    
+    # Validate minimum password length constraint locally in backend
+    if len(user_data.password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters long"
+        )
+
     # Check if duplicate email exists
     existing = db.table("users").select("id").eq("email", user_data.email).execute()
     if existing.data:
@@ -23,18 +28,21 @@ async def signup(user_data: UserSignup, db: Client = Depends(get_supabase)):
         )
         
     try:
+        # Passlib + bcrypt bug warning: ensure requirements.txt pins bcrypt==4.3.0
+        password_hash = hash_password(user_data.password)
+        
         new_user = {
             "name": user_data.name,
             "email": user_data.email,
             "password_hash": password_hash,
-            "created_at": datetime.now(timezone.utc).isoformat()  # ✅ Fixed timestamp format
+            "created_at": datetime.now(timezone.utc).isoformat()
         }
         
         # Explicitly select back the columns to ensure res.data contains rows
         res = db.table("users").insert(new_user).execute()
         
         if not res.data:
-            raise Exception("No data returned from database insertion hook.")
+            raise Exception("No data returned from database insertion.")
             
         user_record = res.data[0]
         return {
@@ -46,11 +54,15 @@ async def signup(user_data: UserSignup, db: Client = Depends(get_supabase)):
             }
         }
     except Exception as e:
-        # If running locally or debugging, this prints the precise internal crash trace to the logs
         print(f"Signup Database Crash Log: {str(e)}")
+        # Check if the error string contains the classic passlib/bcrypt 72-byte signature to point it out in UI
+        error_msg = str(e)
+        if "72 bytes" in error_msg:
+            error_msg = "Server library error (Bcrypt). Please pin bcrypt==4.3.0 in requirements.txt."
+            
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to register user: {str(e)}"
+            detail=f"Failed to register user: {error_msg}"
         )
 
 @router.post("/login", response_model=TokenResponse)
@@ -63,7 +75,17 @@ async def login(credentials: UserLogin, response: Response, db: Client = Depends
         )
         
     user_record = res.data[0]
-    if not verify_password(credentials.password, user_record["password_hash"]):
+    
+    try:
+        is_verified = verify_password(credentials.password, user_record["password_hash"])
+    except Exception as e:
+        print(f"Password verification failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server encountered an encryption verification error. Please check backend packages."
+        )
+        
+    if not is_verified:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
