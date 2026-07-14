@@ -5,6 +5,9 @@ import { Question } from '../types';
 import { Timer, Bookmark, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, Eye, RotateCcw, XCircle } from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
 
+// Central API host config point
+const API_BASE = 'http://localhost:8000/api';
+
 const PracticeTest: React.FC = () => {
   const { type, id } = useParams<{ type: string; id: string }>();
   const navigate = useNavigate();
@@ -58,9 +61,9 @@ const PracticeTest: React.FC = () => {
         } else {
           let url = '';
           if (type === 'year') {
-            url = `/api/questions/${id}`;
+            url = `${API_BASE}/questions/${id}`;
           } else {
-            url = '/api/questions/random-test';
+            url = `${API_BASE}/questions/random-test`;
           }
           const response = await fetch(url);
           if (!response.ok) {
@@ -75,7 +78,7 @@ const PracticeTest: React.FC = () => {
 
           if (token) {
             try {
-              const bResponse = await fetch('/api/bookmarks', {
+              const bResponse = await fetch(`${API_BASE}/bookmarks`, {
                 headers: { 'Authorization': `Bearer ${token}` }
               });
               if (bResponse.ok) {
@@ -177,7 +180,7 @@ const PracticeTest: React.FC = () => {
 
     if (token) {
       try {
-        const url = `/api/bookmark/${qId}`;
+        const url = `${API_BASE}/bookmark/${qId}`;
         await fetch(url, {
           method: isBookmarked ? 'DELETE' : 'POST',
           headers: { 'Authorization': `Bearer ${token}` }

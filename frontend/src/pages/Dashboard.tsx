@@ -7,6 +7,9 @@ import {
 import Toast, { ToastType } from '../components/Toast';
 import { Question } from '../types';
 
+// Change this URL if your local backend runs on a different port (e.g., http://localhost:8000)
+const API_BASE = 'http://localhost:8000/api';
+
 const Dashboard: React.FC = () => {
   const { user, token } = useAuth();
   const navigate = useNavigate();
@@ -46,7 +49,7 @@ const Dashboard: React.FC = () => {
     const fetchProfileData = async () => {
       if (!token) return;
       try {
-        const response = await fetch('/api/bookmarks', {
+        const response = await fetch(`${API_BASE}/bookmarks`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (response.ok) {
@@ -77,7 +80,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const fetchDropdowns = async () => {
       try {
-        const subRes = await fetch('/api/questions/subjects');
+        const subRes = await fetch(`${API_BASE}/questions/subjects`);
         if (subRes.ok) {
           const subData = await subRes.json();
           if (subData.subjects && subData.subjects.length > 0) {
@@ -94,7 +97,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const fetchChapters = async () => {
       try {
-        const url = selectedSubject ? `/api/questions/chapters?subject=${encodeURIComponent(selectedSubject)}` : '/api/questions/chapters';
+        const url = selectedSubject ? `${API_BASE}/questions/chapters?subject=${encodeURIComponent(selectedSubject)}` : `${API_BASE}/questions/chapters`;
         const chapRes = await fetch(url);
         if (chapRes.ok) {
           const chapData = await chapRes.json();
@@ -120,7 +123,7 @@ const Dashboard: React.FC = () => {
         params.append('page', currentPage.toString());
         params.append('pageSize', '5');
 
-        const res = await fetch(`/api/questions?${params.toString()}`);
+        const res = await fetch(`${API_BASE}/questions?${params.toString()}`);
         if (res.ok) {
           const data = await res.json();
           setInteractiveQuestions(data.questions || []);
@@ -165,7 +168,7 @@ const Dashboard: React.FC = () => {
 
     if (token) {
       try {
-        const url = `/api/bookmark/${qId}`;
+        const url = `${API_BASE}/bookmark/${qId}`;
         await fetch(url, {
           method: isCurrentlyBookmarked ? 'DELETE' : 'POST',
           headers: { 'Authorization': `Bearer ${token}` }
