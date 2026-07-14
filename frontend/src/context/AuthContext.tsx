@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
 
+// Your live backend service URL on Render
+const BACKEND_URL = 'https://neet-pyq-practice-platform.onrender.com'; 
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
@@ -31,7 +34,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // Quietly verify token on backend or refresh it
         try {
-          const res = await fetch('/api/me', {
+          const res = await fetch(`${BACKEND_URL}/api/me`, {
             headers: { 'Authorization': `Bearer ${storedToken}` }
           });
           if (res.ok) {
@@ -56,13 +59,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const handleRefresh = async () => {
     try {
-      const res = await fetch('/api/refresh', { method: 'POST' });
+      const res = await fetch(`${BACKEND_URL}/api/refresh`, { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
         setToken(data.accessToken);
         
         // Fetch user info
-        const meRes = await fetch('/api/me', {
+        const meRes = await fetch(`${BACKEND_URL}/api/me`, {
           headers: { 'Authorization': `Bearer ${data.accessToken}` }
         });
         if (meRes.ok) {
@@ -84,7 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = async (email: string, password: string) => {
-    const response = await fetch('/api/login', {
+    const response = await fetch(`${BACKEND_URL}/api/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
@@ -103,7 +106,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signup = async (name: string, email: string, password: string) => {
-    const response = await fetch('/api/signup', {
+    const response = await fetch(`${BACKEND_URL}/api/signup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, password }),
@@ -118,7 +121,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
-      await fetch('/api/logout', { method: 'POST' });
+      await fetch(`${BACKEND_URL}/api/logout`, { method: 'POST' });
     } catch (err) {
       console.warn('Logout request failed:', err);
     } finally {
