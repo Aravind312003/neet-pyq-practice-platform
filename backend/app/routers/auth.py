@@ -3,6 +3,7 @@ from supabase import create_client, Client
 from app.config import settings
 from app.schemas.user import UserSignup, UserLogin, TokenResponse, UserResponse
 from app.security.auth_handler import hash_password, verify_password, create_access_token, create_refresh_token, verify_access_token
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -13,7 +14,7 @@ def get_supabase() -> Client:
 async def signup(user_data: UserSignup, db: Client = Depends(get_supabase)):
     password_hash = hash_password(user_data.password)
     
-    # Check if duplicate email
+    # Check if duplicate email exists
     existing = db.table("users").select("id").eq("email", user_data.email).execute()
     if existing.data:
         raise HTTPException(
@@ -26,15 +27,30 @@ async def signup(user_data: UserSignup, db: Client = Depends(get_supabase)):
             "name": user_data.name,
             "email": user_data.email,
             "password_hash": password_hash,
-            "created_at": "now()"
+            "created_at": datetime.now(timezone.utc).isoformat()  # ✅ Fixed timestamp format
         }
+        
+        # Explicitly select back the columns to ensure res.data contains rows
         res = db.table("users").insert(new_user).execute()
+        
+        if not res.data:
+            raise Exception("No data returned from database insertion hook.")
+            
         user_record = res.data[0]
-        return {"message": "User registered successfully", "user": {"id": user_record["id"], "name": user_record["name"], "email": user_record["email"]}}
+        return {
+            "message": "User registered successfully", 
+            "user": {
+                "id": user_record["id"], 
+                "name": user_record["name"], 
+                "email": user_record["email"]
+            }
+        }
     except Exception as e:
+        # If running locally or debugging, this prints the precise internal crash trace to the logs
+        print(f"Signup Database Crash Log: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to register user"
+            detail=f"Failed to register user: {str(e)}"
         )
 
 @router.post("/login", response_model=TokenResponse)
@@ -62,13 +78,13 @@ async def login(credentials: UserLogin, response: Response, db: Client = Depends
     access_token = create_access_token(payload)
     refresh_token = create_refresh_token(payload)
     
-    # Secure HTTPOnly Cookie for Refresh Token
+    # Secure HTTPOnly Cookie configuration for cross-origin deployment
     response.set_cookie(
         key="neet_refresh_token",
         value=refresh_token,
         httponly=True,
         secure=True,
-        samesite="strict",
+        samesite="none",  # ✅ Must be 'none' for cross-domain cookies between Render and Firebase
         max_age=7 * 24 * 60 * 60  # 7 days
     )
     
@@ -106,7 +122,7 @@ async def refresh(response: Response, neet_refresh_token: str = Cookie(None)):
 
 @router.post("/logout")
 async def logout(response: Response):
-    response.delete_cookie("neet_refresh_token")
+    response.delete_cookie("neet_refresh_token", samesite="none", secure=True)
     return {"message": "Logged out successfully"}
 
 @router.get("/me", response_model=UserResponse)
