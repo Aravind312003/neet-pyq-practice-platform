@@ -36,16 +36,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const res = await fetch(`${BACKEND_URL}/api/auth/me`, {
             headers: { 'Authorization': `Bearer ${storedToken}` }
           });
-          if (res.ok) {
+
+          const contentType = res.headers.get("content-type");
+
+          // Ensure backend actually returned JSON, not an HTML error/sleeping page!
+          if (res.ok && contentType && contentType.includes("application/json")) {
             const data = await res.json();
             setUser(data); // The me endpoint returns user details directly
             localStorage.setItem('neet_user', JSON.stringify(data));
           } else {
-            // Token might be expired, try refreshing
+            // Token might be expired or server returned bad content, try refreshing
             await handleRefresh();
           }
         } catch (err) {
           console.warn('Initial token validation failed:', err);
+          await handleRefresh();
         }
       } else {
         // No local token, try refreshing using the HttpOnly cookie
@@ -59,7 +64,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const handleRefresh = async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/auth/refresh`, { method: 'POST' });
-      if (res.ok) {
+      const contentType = res.headers.get("content-type");
+
+      if (res.ok && contentType && contentType.includes("application/json")) {
         const data = await res.json();
         setToken(data.accessToken);
         
@@ -67,14 +74,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const meRes = await fetch(`${BACKEND_URL}/api/auth/me`, {
           headers: { 'Authorization': `Bearer ${data.accessToken}` }
         });
-        if (meRes.ok) {
+        const meContentType = meRes.headers.get("content-type");
+
+        if (meRes.ok && meContentType && meContentType.includes("application/json")) {
           const meData = await meRes.json();
           setUser(meData);
           localStorage.setItem('neet_access_token', data.accessToken);
           localStorage.setItem('neet_user', JSON.stringify(meData));
         }
       } else {
-        // Clear stale local info
+        // Clear stale local info if session recovery is not valid
         localStorage.removeItem('neet_access_token');
         localStorage.removeItem('neet_user');
       }
@@ -91,6 +100,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
+
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      throw new Error('Server returned an invalid response. Please try again in a moment.');
+    }
 
     const data = await response.json();
     if (!response.ok) {
@@ -110,6 +124,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, password }),
     });
+
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      throw new Error('Server is currently sleeping. Please wait 30 seconds and try again.');
+    }
 
     const data = await response.json();
     if (!response.ok) {
