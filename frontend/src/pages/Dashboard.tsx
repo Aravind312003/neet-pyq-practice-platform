@@ -7,8 +7,8 @@ import {
 import Toast, { ToastType } from '../components/Toast';
 import { Question } from '../types';
 
-// Change this URL if your local backend runs on a different port (e.g., http://localhost:8000)
-const API_BASE = 'http://localhost:8000/api';
+// Pointing directly to your live Render backend
+const API_BASE = 'https://neet-pyq-practice-platform.onrender.com/api';
 
 const Dashboard: React.FC = () => {
   const { user, token } = useAuth();

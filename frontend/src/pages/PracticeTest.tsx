@@ -5,8 +5,8 @@ import { Question } from '../types';
 import { Timer, Bookmark, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, Eye, RotateCcw, XCircle } from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
 
-// Central API host config point
-const API_BASE = 'http://localhost:8000/api';
+// Pointing directly to your live Render backend
+const API_BASE = 'https://neet-pyq-practice-platform.onrender.com/api';
 
 const PracticeTest: React.FC = () => {
   const { type, id } = useParams<{ type: string; id: string }>();
