@@ -23,7 +23,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Attempt to load credentials from local storage or refresh token from API on mount
   useEffect(() => {
     const initAuth = async () => {
-      // First, try to fetch the current user details if we have a saved token
       const storedToken = localStorage.getItem('neet_access_token');
       const storedUser = localStorage.getItem('neet_user');
 
@@ -34,13 +33,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // Quietly verify token on backend or refresh it
         try {
-          const res = await fetch(`${BACKEND_URL}/api/me`, {
+          const res = await fetch(`${BACKEND_URL}/api/auth/me`, {
             headers: { 'Authorization': `Bearer ${storedToken}` }
           });
           if (res.ok) {
             const data = await res.json();
-            setUser(data.user);
-            localStorage.setItem('neet_user', JSON.stringify(data.user));
+            setUser(data); // The me endpoint returns user details directly
+            localStorage.setItem('neet_user', JSON.stringify(data));
           } else {
             // Token might be expired, try refreshing
             await handleRefresh();
@@ -59,20 +58,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const handleRefresh = async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/refresh`, { method: 'POST' });
+      const res = await fetch(`${BACKEND_URL}/api/auth/refresh`, { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
         setToken(data.accessToken);
         
         // Fetch user info
-        const meRes = await fetch(`${BACKEND_URL}/api/me`, {
+        const meRes = await fetch(`${BACKEND_URL}/api/auth/me`, {
           headers: { 'Authorization': `Bearer ${data.accessToken}` }
         });
         if (meRes.ok) {
           const meData = await meRes.json();
-          setUser(meData.user);
+          setUser(meData);
           localStorage.setItem('neet_access_token', data.accessToken);
-          localStorage.setItem('neet_user', JSON.stringify(meData.user));
+          localStorage.setItem('neet_user', JSON.stringify(meData));
         }
       } else {
         // Clear stale local info
@@ -87,7 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = async (email: string, password: string) => {
-    const response = await fetch(`${BACKEND_URL}/api/login`, {
+    const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
@@ -106,7 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signup = async (name: string, email: string, password: string) => {
-    const response = await fetch(`${BACKEND_URL}/api/signup`, {
+    const response = await fetch(`${BACKEND_URL}/api/auth/signup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, password }),
@@ -114,14 +113,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.error || 'Failed to sign up.');
+      throw new Error(data.detail || 'Failed to sign up.');
     }
     return data;
   };
 
   const logout = async () => {
     try {
-      await fetch(`${BACKEND_URL}/api/logout`, { method: 'POST' });
+      await fetch(`${BACKEND_URL}/api/auth/logout`, { method: 'POST' });
     } catch (err) {
       console.warn('Logout request failed:', err);
     } finally {
