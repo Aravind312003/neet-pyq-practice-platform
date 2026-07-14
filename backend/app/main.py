@@ -1,3 +1,4 @@
+import os
 import uvicorn
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
@@ -29,12 +30,15 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS Middleware
-origins = []
+# CORS Middleware Configuration
+origins = [
+    "https://neet-pyq-practice-platform.web.app",  # Allowed production Firebase URL
+]
+
 if settings.ENV != "production":
     origins.append("*")
 else:
-    # Restrict to configured production URL
+    # Restrict to configured production URL or fallback
     origins.append(os.getenv("APP_URL", "https://localhost:3000"))
 
 app.add_middleware(
