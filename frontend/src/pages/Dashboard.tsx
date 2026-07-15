@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Trophy, BookOpen, Clock, Award, Bookmark, Play, HelpCircle, ChevronRight, CheckCircle2, Search, ArrowRight } from 'lucide-react';
+import { 
+  Trophy, BookOpen, Clock, Award, Bookmark, Play, HelpCircle, AlertCircle, ChevronRight, CheckCircle2, Search, ArrowRight, BookMarked, Check, X
+} from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
 import { Question } from '../types';
 
@@ -19,7 +21,6 @@ const Dashboard: React.FC = () => {
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedChapter, setSelectedChapter] = useState('');
   const [selectedYear, setSelectedYear] = useState('');
-
   const [subjectsList, setSubjectsList] = useState<string[]>(['Biology', 'Chemistry', 'Physics']);
   const [chaptersList, setChaptersList] = useState<string[]>([]);
   const [yearsList] = useState<number[]>([2025, 2024, 2023, 2022, 2021, 2020]);
@@ -28,7 +29,7 @@ const Dashboard: React.FC = () => {
   const [totalQuestionsCount, setTotalQuestionsCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [isQuestionsLoading, setIsQuestionsLoading] = useState(false);
-
+  
   const [checkedAnswers, setCheckedAnswers] = useState<{ [key: string]: { selected: string; isCorrect: boolean } }>({});
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string | number>>(new Set());
 
@@ -94,7 +95,9 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const fetchChapters = async () => {
       try {
-        const url = selectedSubject ? `${API_BASE}/questions/chapters?subject=${encodeURIComponent(selectedSubject)}` : `${API_BASE}/questions/chapters`;
+        const url = selectedSubject 
+          ? `${API_BASE}/questions/chapters?subject=${encodeURIComponent(selectedSubject)}` 
+          : `${API_BASE}/questions/chapters`;
         const chapRes = await fetch(url);
         if (chapRes.ok) {
           const chapData = await chapRes.json();
@@ -132,6 +135,7 @@ const Dashboard: React.FC = () => {
         setIsQuestionsLoading(false);
       }
     };
+
     fetchBankQuestions();
   }, [searchTerm, selectedSubject, selectedChapter, selectedYear, currentPage]);
 
@@ -164,7 +168,7 @@ const Dashboard: React.FC = () => {
 
     if (token) {
       try {
-        const url = `${API_BASE}/bookmark/${qId}`;
+        const url = `${API_BASE}/bookmarks/${qId}`;
         await fetch(url, {
           method: isCurrentlyBookmarked ? 'DELETE' : 'POST',
           headers: { 'Authorization': `Bearer ${token}` }
@@ -177,261 +181,223 @@ const Dashboard: React.FC = () => {
 
   const handleSelectOptionInList = (question: Question, optionKey: string) => {
     const isCorrect = optionKey.toUpperCase() === question.correct_answer.toUpperCase();
-    setCheckedAnswers(prev => ({ ...prev, [question.id.toString()]: { selected: optionKey, isCorrect } }));
+    setCheckedAnswers(prev => ({
+      ...prev,
+      [question.id.toString()]: { selected: optionKey, isCorrect }
+    }));
   };
 
   return (
     <div className="min-h-screen bg-gray-50/50 pb-16 pt-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
         
-        {/* Welcome Section */}
         <div className="bg-white border border-gray-100 rounded-2xl p-6 md:p-8 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden">
           <div className="absolute top-0 right-0 transform translate-x-16 -translate-y-16 w-48 h-48 bg-blue-50 rounded-full opacity-40"></div>
-          <div className="space-y-2 relative z-10">
-            <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight font-sans">
-              Welcome back, {user?.name || 'Future Doctor'}!
+          <div className="relative z-10 space-y-3.5 max-w-3xl">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold font-sans text-emerald-700 uppercase tracking-widest bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">
+                ● PRO SYSTEM ACTIVE
+              </span>
+            </div>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight font-sans">
+              NEET Previous Year Question Hub
             </h1>
-            <p className="text-sm text-gray-500 max-w-xl leading-relaxed">
-              Accelerate your NEET formulation using verified dynamic previous year question templates, modular assessments, and real-time dashboard profiling analytics.
+            <p className="text-gray-500 text-xs md:text-sm leading-relaxed font-medium">
+              Experience simulated high-pressure practice with precise 3-hour exam timers, smart bookmarking, and instant detailed solutions.
             </p>
           </div>
-          <button
-            onClick={handleStartRandomTest}
-            className="w-full md:w-auto px-5 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 transition-all flex items-center justify-center gap-2.5 text-sm shadow-sm shadow-blue-200 cursor-pointer group shrink-0"
-          >
-            <Play className="w-4 h-4 fill-white" />
-            Launch Full Mock Exam
-            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-          </button>
-        </div>
-
-        {/* Stats Matrix */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-xs flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
-              <BookOpen className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="text-xs font-semibold text-gray-400 font-sans">Target Exam</span>
-              <span className="text-lg font-black text-gray-900 block mt-0.5">NEET UG</span>
-            </div>
-          </div>
-
-          <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-xs flex items-center gap-4">
-            <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
-              <Bookmark className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="text-xs font-semibold text-gray-400 font-sans">Saved Marks</span>
-              <span className="text-lg font-black text-gray-900 block mt-0.5">{bookmarkCount} Questions</span>
-            </div>
-          </div>
-
-          <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-xs flex items-center gap-4">
-            <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
-              <Clock className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="text-xs font-semibold text-gray-400 font-sans">Past Attempts</span>
-              <span className="text-lg font-black text-gray-900 block mt-0.5">{pastAttemptsCount} Sheets</span>
-            </div>
-          </div>
-
-          <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-xs flex items-center gap-4">
-            <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center">
-              <Trophy className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="text-xs font-semibold text-gray-400 font-sans">Recent High Score</span>
-              <span className="text-lg font-black text-gray-900 block mt-0.5">{avgScore} <span className="text-xs font-semibold text-gray-400">/ 720</span></span>
-            </div>
+          <div className="relative z-10 shrink-0">
+            <button
+              onClick={handleStartRandomTest}
+              className="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md shadow-blue-100 transition-all flex items-center gap-2.5 cursor-pointer"
+            >
+              <HelpCircle className="w-4 h-4 text-blue-100" />
+              Random Mock Test (180 Qs)
+            </button>
           </div>
         </div>
 
-        {/* Core Workspace split layout grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-          
-          {/* Left Column: PYQ Year Paper Cards */}
-          <div className="lg:col-span-1 space-y-4">
-            <div className="flex items-center gap-2 px-1">
-              <Award className="w-4 h-4 text-gray-400" />
-              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest font-sans">NEET Annual PYQ Modules</h2>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3.5">
-              {yearsList.map(year => (
-                <div key={year} className="bg-white border border-gray-100 rounded-xl p-4 shadow-xs flex items-center justify-between hover:border-gray-200 transition-all group">
-                  <div className="space-y-1">
-                    <span className="text-sm font-bold text-gray-900 font-sans block group-hover:text-blue-600 transition-colors">NEET {year} PYQ Paper</span>
-                    <span className="text-[11px] text-gray-400 font-medium block">180 Questions • 3 Hours</span>
+        <div>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-lg font-bold text-gray-900 font-sans tracking-tight">
+              Select Year Practice Paper
+            </h2>
+            <span className="text-[10px] font-bold font-mono tracking-wider text-gray-400 bg-gray-100 border border-gray-200 px-3 py-1 rounded-full">
+              NEET EXAMS AVAILABLE
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+            {yearsList.map((year, idx) => {
+              const cardStyles = [
+                'bg-blue-50/70 border-blue-100',
+                'bg-emerald-50/70 border-emerald-100',
+                'bg-purple-50/70 border-purple-100',
+                'bg-amber-50/70 border-amber-100',
+                'bg-sky-50/70 border-sky-100',
+                'bg-rose-50/70 border-rose-100',
+              ];
+              const style = cardStyles[idx % cardStyles.length];
+              return (
+                <div key={year} className={`${style} border rounded-2xl p-5 shadow-xs hover:shadow-md transition-all flex justify-between items-center relative overflow-hidden`}>
+                  <div className="space-y-1.5 relative z-10">
+                    <span className="text-[10px] font-bold tracking-widest font-sans text-gray-500 uppercase">NEET EXAM</span>
+                    <h3 className="text-2xl font-black text-gray-900 font-mono tracking-tight">{year}</h3>
+                    <p className="text-[11px] text-gray-500 font-medium">180 Questions</p>
                   </div>
                   <button
                     onClick={() => handleStartYearTest(year)}
-                    className="p-2 bg-gray-50 text-gray-400 hover:bg-blue-600 hover:text-white rounded-lg transition-all group-hover:bg-blue-50 group-hover:text-blue-600"
+                    className="w-10 h-10 bg-white hover:bg-blue-600 text-gray-700 hover:text-white rounded-full flex items-center justify-center transition-all cursor-pointer shadow-xs relative z-10"
                   >
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="w-5 h-5" />
                   </button>
                 </div>
-              ))}
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-lg font-bold text-gray-900 font-sans tracking-tight">Interactive NEET Question Bank</h2>
             </div>
+            <span className="text-xs text-gray-400 font-semibold font-mono">
+              Showing {totalQuestionsCount} Matches
+            </span>
           </div>
 
-          {/* Right Column: Searchable Interactive Question Repository Workspace */}
-          <div className="lg:col-span-2 space-y-5">
-            <div className="flex items-center gap-2 px-1">
-              <HelpCircle className="w-4 h-4 text-gray-400" />
-              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest font-sans">Sandbox Question Explorer Workspace</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
+            <div className="relative md:col-span-1">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 pointer-events-none">
+                <Search className="w-4 h-4" />
+              </span>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                placeholder="Search keywords..."
+                className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-xs bg-white"
+              />
             </div>
 
-            <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-xs space-y-4">
-              {/* Dynamic Filter Controls Matrix */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="col-span-1 sm:col-span-2 lg:col-span-4 relative">
-                  <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search queries or specific topics..."
-                    value={searchTerm}
-                    onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-xs font-medium bg-gray-50/50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 placeholder-gray-400 transition-all"
-                  />
-                </div>
+            <select value={selectedSubject} onChange={(e) => { setSelectedSubject(e.target.value); setCurrentPage(1); }} className="py-2.5 px-3 border border-gray-200 rounded-xl text-xs bg-white">
+              <option value="">All Subjects</option>
+              {subjectsList.map(sub => <option key={sub} value={sub}>{sub}</option>)}
+            </select>
 
-                <select
-                  value={selectedSubject}
-                  onChange={(e) => { setSelectedSubject(e.target.value); setCurrentPage(1); }}
-                  className="px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold bg-white text-gray-600 focus:outline-hidden"
-                >
-                  <option value="">All Subjects</option>
-                  {subjectsList.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+            <select value={selectedChapter} onChange={(e) => { setSelectedChapter(e.target.value); setCurrentPage(1); }} className="py-2.5 px-3 border border-gray-200 rounded-xl text-xs bg-white">
+              <option value="">All Chapters</option>
+              {chaptersList.map(chap => <option key={chap} value={chap}>{chap}</option>)}
+            </select>
 
-                <select
-                  value={selectedChapter}
-                  onChange={(e) => { setSelectedChapter(e.target.value); setCurrentPage(1); }}
-                  disabled={!selectedSubject && chaptersList.length === 0}
-                  className="px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold bg-white text-gray-600 focus:outline-hidden disabled:bg-gray-50"
-                >
-                  <option value="">All Chapters</option>
-                  {chaptersList.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+            <select value={selectedYear} onChange={(e) => { setSelectedYear(e.target.value); setCurrentPage(1); }} className="py-2.5 px-3 border border-gray-200 rounded-xl text-xs bg-white">
+              <option value="">All Years</option>
+              {yearsList.map(yr => <option key={yr} value={yr.toString()}>{yr}</option>)}
+            </select>
+          </div>
 
-                <select
-                  value={selectedYear}
-                  onChange={(e) => { setSelectedYear(e.target.value); setCurrentPage(1); }}
-                  className="px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold bg-white text-gray-600 focus:outline-hidden"
-                >
-                  <option value="">All Years</option>
-                  {yearsList.map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </div>
+          {isQuestionsLoading ? (
+            <div className="py-20 flex flex-col items-center justify-center space-y-3">
+              <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-xs text-gray-400">Loading dynamic database...</p>
+            </div>
+          ) : interactiveQuestions.length === 0 ? (
+            <div className="py-16 text-center border border-dashed border-gray-100 rounded-2xl">
+              <BookMarked className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <h4 className="text-xs font-bold text-gray-900">No matching questions found</h4>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {interactiveQuestions.map((q, idx) => {
+                const questionIndex = (currentPage - 1) * 5 + idx + 1;
+                const userChoice = checkedAnswers[q.id.toString()];
+                const isBookmarked = bookmarkedIds.has(q.id.toString());
 
-              {/* Dynamic Workspace Container */}
-              {isQuestionsLoading ? (
-                <div className="py-16 text-center">
-                  <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                  <p className="mt-3 text-xs text-gray-400 font-medium">Filtering Item Matrix...</p>
-                </div>
-              ) : interactiveQuestions.length === 0 ? (
-                <div className="py-12 border border-dashed border-gray-200 rounded-xl text-center">
-                  <p className="text-xs font-medium text-gray-400">No database documents match specified parameters.</p>
-                </div>
-              ) : (
-                <div className="space-y-5">
-                  {interactiveQuestions.map((q) => {
-                    const answered = checkedAnswers[q.id.toString()];
-                    const isBookmarked = bookmarkedIds.has(q.id.toString());
-
-                    return (
-                      <div key={q.id} className="border border-gray-100 rounded-xl p-5 hover:border-gray-200 transition-all space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex flex-wrap gap-2">
-                            <span className="px-2 py-0.5 text-[9px] font-bold bg-blue-50 text-blue-600 rounded uppercase">{q.subject}</span>
-                            <span className="px-2 py-0.5 text-[9px] font-bold bg-gray-50 text-gray-500 rounded uppercase">{q.chapter}</span>
-                            <span className="px-2 py-0.5 text-[9px] font-bold bg-purple-50 text-purple-600 rounded">{q.year} PYQ</span>
-                          </div>
-                          <button
-                            onClick={() => handleToggleBookmarkInList(q.id)}
-                            className={`p-1.5 border rounded-lg transition-all ${isBookmarked ? 'bg-amber-50 border-amber-200 text-amber-500' : 'bg-white text-gray-300 hover:text-gray-400'}`}
-                          >
-                            <Bookmark className="w-3.5 h-3.5 fill-current" />
-                          </button>
-                        </div>
-
-                        <p className="text-xs font-bold text-gray-800 leading-relaxed font-sans">{q.question}</p>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {[
-                            { key: 'A', text: q.option_a },
-                            { key: 'B', text: q.option_b },
-                            { key: 'C', text: q.option_c },
-                            { key: 'D', text: q.option_d }
-                          ].map(opt => {
-                            const isSelected = answered?.selected === opt.key;
-                            let style = 'border-gray-100 text-gray-600 bg-white hover:bg-gray-50';
-
-                            if (isSelected) {
-                              style = answered.isCorrect
-                                ? 'bg-emerald-50 border-emerald-400 text-emerald-800 font-semibold'
-                                : 'bg-red-50 border-red-400 text-red-800 font-semibold';
-                            }
-
-                            return (
-                              <button
-                                key={opt.key}
-                                disabled={!!answered}
-                                onClick={() => handleSelectOptionInList(q, opt.key)}
-                                className={`text-left px-3 py-2 border rounded-xl text-xs flex items-center gap-2.5 transition-all disabled:opacity-90 ${style}`}
-                              >
-                                <span className={`w-5 h-5 rounded flex items-center justify-center font-bold text-[10px] ${isSelected ? (answered.isCorrect ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white') : 'bg-gray-100 text-gray-400'}`}>{opt.key}</span>
-                                <span>{opt.text}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {answered && (
-                          <div className={`p-3 rounded-xl flex items-start gap-2.5 ${answered.isCorrect ? 'bg-emerald-50/50 text-emerald-800 border border-emerald-100' : 'bg-red-50/50 text-red-800 border border-red-100'}`}>
-                            <CheckCircle2 className={`w-4 h-4 mt-0.5 shrink-0 ${answered.isCorrect ? 'text-emerald-600' : 'text-red-500'}`} />
-                            <div className="space-y-1">
-                              <p className="text-[11px] font-bold">
-                                {answered.isCorrect ? 'Correct submission!' : `Incorrect submission. True option is ${q.correct_answer.toUpperCase()}.`}
-                              </p>
-                              {q.explanation && (
-                                <p className="text-[10px] text-gray-500 leading-relaxed font-sans mt-1">{q.explanation}</p>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {/* Dynamic Custom Pagination Bar Footer */}
-                  {totalQuestionsCount > 5 && (
-                    <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
-                      <button
-                        disabled={currentPage === 1}
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                        className="px-3.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 disabled:opacity-50 transition-colors"
-                      >
-                        Previous Page
-                      </button>
-                      <span className="text-xs text-gray-400 font-semibold">
-                        Page {currentPage} of {Math.ceil(totalQuestionsCount / 5)}
-                      </span>
-                      <button
-                        disabled={currentPage >= Math.ceil(totalQuestionsCount / 5)}
-                        onClick={() => setCurrentPage(prev => prev + 1)}
-                        className="px-3.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 disabled:opacity-50 transition-colors"
-                      >
-                        Next Page
-                      </button>
+                return (
+                  <div key={q.id} className="border border-gray-100 bg-white rounded-2xl shadow-xs overflow-hidden flex flex-col md:flex-row">
+                    <div className="md:w-20 bg-gray-50/50 border-r border-gray-100 flex items-center justify-center p-4">
+                      <span className="text-xs font-bold text-gray-900 font-mono">Q.{questionIndex}</span>
                     </div>
-                  )}
-                </div>
-              )}
+
+                    <div className="flex-1 p-5 space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex gap-2">
+                          <span className="px-2 py-0.5 text-[9px] font-bold bg-blue-50 text-blue-600 rounded">{q.subject}</span>
+                          <span className="px-2 py-0.5 text-[9px] font-bold bg-gray-50 text-gray-500 rounded">{q.chapter}</span>
+                        </div>
+                        <button onClick={() => handleToggleBookmarkInList(q.id)} className={`p-1.5 rounded-lg border ${isBookmarked ? 'bg-amber-50 text-amber-500' : 'bg-white text-gray-400'}`}>
+                          <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-current' : ''}`} />
+                        </button>
+                      </div>
+
+                      <p className="text-xs md:text-sm font-bold text-gray-800">[NEET {q.year}] {q.question}</p>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                        {[
+                          { key: 'A', text: q.option_a },
+                          { key: 'B', text: q.option_b },
+                          { key: 'C', text: q.option_c },
+                          { key: 'D', text: q.option_d }
+                        ].map(opt => {
+                          const isOptSelected = userChoice?.selected === opt.key;
+                          const isCorrectOpt = opt.key.toUpperCase() === q.correct_answer.toUpperCase();
+                          let btnClass = 'border-gray-100 text-gray-600 hover:bg-gray-50';
+                          let badgeClass = 'bg-gray-100 text-gray-500';
+
+                          if (userChoice) {
+                            if (isCorrectOpt) {
+                              btnClass = 'bg-emerald-50 border-emerald-300 text-emerald-800 font-semibold';
+                              badgeClass = 'bg-emerald-600 text-white';
+                            } else if (isOptSelected) {
+                              btnClass = 'bg-rose-50 border-rose-300 text-rose-800 font-semibold';
+                              badgeClass = 'bg-rose-600 text-white';
+                            }
+                          }
+
+                          return (
+                            <button key={opt.key} onClick={() => handleSelectOptionInList(q, opt.key)} className={`w-full text-left px-3.5 py-2.5 border rounded-xl text-xs flex items-center gap-3 ${btnClass}`}>
+                              <span className={`w-5 h-5 rounded-md flex items-center justify-center font-bold text-[9px] ${badgeClass}`}>{opt.key}</span>
+                              <span>{opt.text}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {userChoice && q.explanation && (
+                        <div className="bg-emerald-50/30 border border-emerald-50 rounded-xl p-3.5 text-[11px] text-gray-600">
+                          <p className="font-bold text-emerald-800 mb-1">{userChoice.isCorrect ? 'Correct selection!' : `Incorrect. Correct answer is Option ${q.correct_answer}`}</p>
+                          <p className="whitespace-pre-line">{q.explanation}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </div>
+          )}
+
+          {totalQuestionsCount > 5 && (
+            <div className="pt-6 border-t border-gray-100 flex items-center justify-between">
+              <button
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                className="px-3.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 disabled:opacity-50"
+              >
+                Previous Page
+              </button>
+              <span className="text-xs text-gray-400 font-semibold">
+                Page {currentPage} of {Math.ceil(totalQuestionsCount / 5)}
+              </span>
+              <button
+                disabled={currentPage >= Math.ceil(totalQuestionsCount / 5)}
+                onClick={() => setCurrentPage(prev => prev + 1)}
+                className="px-3.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 disabled:opacity-50"
+              >
+                Next Page
+              </button>
+            </div>
+          )}
         </div>
       </div>
       <Toast message={toastMessage} type={toastType} isVisible={showToast} onClose={() => setShowToast(false)} />
