@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Question } from '../types';
-import { Timer, Bookmark, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, Eye, RotateCcw, XCircle } from 'lucide-react';
+import { Timer, Bookmark, ChevronLeft, XCircle } from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
 
 const API_BASE = 'https://neet-pyq-practice-platform.onrender.com/api';
@@ -19,8 +19,7 @@ const PracticeTest: React.FC = () => {
   const [answers, setAnswers] = useState<{ [key: string]: string }>({});
   const [bookmarks, setBookmarks] = useState<Set<string | number>>(new Set());
   const [visited, setVisited] = useState<Set<number>>(new Set([0]));
-  const [revealedAnswers, setRevealedAnswers] = useState<Set<number>>(new Set());
-  const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false);
+  const [, setRevealedAnswers] = useState<Set<number>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(10800);
@@ -182,14 +181,6 @@ const PracticeTest: React.FC = () => {
     }
   };
 
-  const handleRevealAnswer = () => {
-    setRevealedAnswers(prev => {
-      const next = new Set(prev);
-      next.add(currentIndex);
-      return next;
-    });
-  };
-
   const handlePrev = () => {
     if (currentIndex > 0) {
       const prevIdx = currentIndex - 1;
@@ -217,7 +208,6 @@ const PracticeTest: React.FC = () => {
     let correctCount = 0;
     let wrongCount = 0;
     let unansweredCount = 0;
-
     questions.forEach(q => {
       const selected = answers[q.id.toString()];
       if (!selected) {
@@ -228,14 +218,12 @@ const PracticeTest: React.FC = () => {
         wrongCount += 1;
       }
     });
-
     const score = (correctCount * 4) - (wrongCount * 1);
     const totalPotentialScore = questions.length * 4;
     const percentage = Math.max(0, parseFloat(((score / totalPotentialScore) * 100).toFixed(1)));
     const totalAnswered = correctCount + wrongCount;
     const accuracy = totalAnswered > 0 ? parseFloat(((correctCount / totalAnswered) * 100).toFixed(1)) : 0;
     const timeTaken = 10800 - timeLeft;
-
     const finalResult = {
       correct: correctCount,
       wrong: wrongCount,
@@ -256,7 +244,6 @@ const PracticeTest: React.FC = () => {
     const localKey = `neet_test_state_${type}_${id}`;
     localStorage.removeItem(localKey);
     triggerToast(isAutoSubmit ? 'Time expired! Test Auto-Submitted.' : 'Test submitted successfully!', 'success');
-    
     setTimeout(() => {
       navigate('/result');
     }, 1000);

@@ -1,17 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TestResult } from '../types';
-import { 
-  Trophy, CheckCircle, XCircle, AlertCircle, Clock, Percent, Target, 
-  RotateCcw, ArrowRight, LayoutDashboard, Share2, Eye
-} from 'lucide-react';
+import { Trophy, CheckCircle, XCircle, AlertCircle, Clock, Percent, Target, RotateCcw, LayoutDashboard, Eye } from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
 
 const Result: React.FC = () => {
   const navigate = useNavigate();
   const [result, setResult] = useState<TestResult | null>(null);
 
-  // Toast System
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<ToastType>('success');
   const [showToast, setShowToast] = useState(false);
@@ -34,7 +30,6 @@ const Result: React.FC = () => {
     }
   }, [navigate]);
 
-  // Format seconds to Hh Mm Ss
   const formatSeconds = (totalSeconds: number) => {
     const hrs = Math.floor(totalSeconds / 3600);
     const mins = Math.floor((totalSeconds % 3600) / 60);
@@ -58,11 +53,10 @@ const Result: React.FC = () => {
     );
   }
 
-  // Set visual color rating based on score percentage
   const getRatingTheme = (pct: number) => {
-    if (pct >= 80) return { text: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', textAccent: 'text-emerald-700', rating: 'Excellent Performance! Ready for NEET.' };
-    if (pct >= 55) return { text: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100', textAccent: 'text-blue-700', rating: 'Good Progress. Target weak chapters next.' };
-    return { text: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100', textAccent: 'text-amber-700', rating: 'Needs Improvement. Focus on concept reviews.' };
+    if (pct >= 80) return { text: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', rating: 'Excellent Performance! Ready for NEET.' };
+    if (pct >= 55) return { text: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100', rating: 'Good Progress. Target weak chapters next.' };
+    return { text: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100', rating: 'Needs Improvement. Focus on concept reviews.' };
   };
 
   const theme = getRatingTheme(result.percentage);
@@ -71,9 +65,7 @@ const Result: React.FC = () => {
     <div className="min-h-screen bg-gray-50/50 pb-16 pt-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* Main Score Header and Badge */}
         <div className="bg-white border border-gray-100 rounded-2xl p-6 md:p-8 shadow-xs relative overflow-hidden mb-6 text-center">
-          {/* Decorative background shape */}
           <div className="absolute top-0 right-0 transform translate-x-12 -translate-y-12 w-40 h-40 bg-blue-50 rounded-full opacity-50"></div>
 
           <div className="w-16 h-16 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center mx-auto mb-4 text-blue-600 shadow-sm">
@@ -88,7 +80,6 @@ const Result: React.FC = () => {
             {theme.rating}
           </p>
 
-          {/* Large dynamic Score Display */}
           <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6 pt-8 border-t border-gray-100">
             <div className="text-center p-4 rounded-xl bg-gray-50/50 border border-gray-100/50">
               <span className="text-xs text-gray-500 font-medium font-sans">Final Score</span>
@@ -115,7 +106,6 @@ const Result: React.FC = () => {
           </div>
         </div>
 
-        {/* Detailed Metrics Breakdown */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
           <div className="bg-white border border-gray-100 rounded-xl p-4 flex items-center gap-3 shadow-xs">
             <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
@@ -158,7 +148,6 @@ const Result: React.FC = () => {
           </div>
         </div>
 
-        {/* Action Triggers footer */}
         <div className="flex flex-wrap gap-3 items-center justify-center">
           <button
             onClick={() => navigate('/')}
@@ -193,15 +182,8 @@ const Result: React.FC = () => {
             Attempt Again
           </button>
         </div>
-
       </div>
-
-      <Toast
-        message={toastMessage}
-        type={toastType}
-        isVisible={showToast}
-        onClose={() => setShowToast(false)}
-      />
+      <Toast message={toastMessage} type={toastType} isVisible={showToast} onClose={() => setShowToast(false)} />
     </div>
   );
 };
