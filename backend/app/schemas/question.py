@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 class QuestionResponse(BaseModel):
-    id: str
+    id: int
     year: int
     question_number: int
     subject: str
