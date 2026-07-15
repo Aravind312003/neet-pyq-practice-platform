@@ -25,6 +25,7 @@ const PracticeTest: React.FC = () => {
   const [timeLeft, setTimeLeft] = useState<number>(10800);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false);
 
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<ToastType>('success');
@@ -298,9 +299,15 @@ const PracticeTest: React.FC = () => {
             <button onClick={() => setShowCancelModal(true)} className="p-1.5 text-gray-400 hover:text-gray-900 rounded-lg">
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <span className="text-sm font-bold text-gray-900 uppercase tracking-tight">
-              {type === 'year' ? `NEET PYQ ${id} Exam` : 'Random Practice Mock Test'}
-            </span>
+            <div className="flex items-center gap-2.5">
+              <span className="text-sm font-bold text-gray-900 tracking-tight">
+                {type === 'year' ? `NEET ${id} Official Paper` : 'Random Practice Mock Test'}
+              </span>
+              <span className="text-gray-300">|</span>
+              <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg">
+                Question {currentIndex + 1} of {questions.length}
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-xl">
@@ -384,36 +391,55 @@ const PracticeTest: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-xs max-h-[480px] flex flex-col">
-          <h4 className="text-xs font-bold text-gray-900 mb-4 uppercase tracking-wider">Question Sheet Palette</h4>
-          <div className="grid grid-cols-5 gap-2 overflow-y-auto p-1 flex-1">
-            {questions.map((q, idx) => (
-              <button key={q.id} onClick={() => setCurrentIndex(idx)} className={`h-9 w-9 text-center text-xs font-bold font-mono rounded-lg transition-all ${getStatusClass(idx, q.id)}`}>
-                {idx + 1}
-              </button>
-            ))}
+        <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-xs max-h-[560px] flex flex-col">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <h4 className="text-sm font-bold text-gray-900 tracking-tight">Question Palette</h4>
+            <label className="flex items-center gap-2 text-[11px] font-semibold text-gray-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showBookmarkedOnly}
+                onChange={(e) => setShowBookmarkedOnly(e.target.checked)}
+                className="w-3.5 h-3.5 rounded accent-blue-600"
+              />
+              Show Bookmarks Only
+            </label>
           </div>
-          <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 gap-x-3 gap-y-2">
+
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 pb-4 mb-4 border-b border-gray-100">
             <div className="flex items-center gap-2">
               <span className="w-3.5 h-3.5 rounded-sm bg-emerald-600 shrink-0"></span>
-              <span className="text-[10px] font-semibold text-gray-500">Answered</span>
+              <span className="text-[11px] font-semibold text-gray-600">Answered</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-3.5 h-3.5 rounded-sm bg-amber-500 shrink-0"></span>
-              <span className="text-[10px] font-semibold text-gray-500">Bookmarked</span>
+              <span className="text-[11px] font-semibold text-gray-600">Bookmarked</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-3.5 rounded-sm bg-gray-200 border border-gray-300 shrink-0"></span>
+              <span className="text-[11px] font-semibold text-gray-600">Visited</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-3.5 h-3.5 rounded-sm bg-white border border-gray-300 shrink-0"></span>
-              <span className="text-[10px] font-semibold text-gray-500">Not Visited</span>
+              <span className="text-[11px] font-semibold text-gray-600">Not Visited</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-3.5 h-3.5 rounded-sm bg-gray-200 shrink-0"></span>
-              <span className="text-[10px] font-semibold text-gray-500">Visited</span>
+              <span className="w-3.5 h-3.5 rounded-sm bg-white border-2 border-blue-600 shrink-0"></span>
+              <span className="text-[11px] font-semibold text-gray-600">Active Selection</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="w-3.5 h-3.5 rounded-sm bg-blue-600 shrink-0"></span>
-              <span className="text-[10px] font-semibold text-gray-500">Active Selection</span>
-            </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-2.5 overflow-y-auto p-1 flex-1">
+            {questions.map((q, idx) => {
+              if (showBookmarkedOnly && !bookmarks.has(q.id)) return null;
+              return (
+                <button key={q.id} onClick={() => setCurrentIndex(idx)} className={`h-11 w-11 text-center text-xs font-bold font-mono rounded-lg transition-all ${getStatusClass(idx, q.id)}`}>
+                  {idx + 1}
+                </button>
+              );
+            })}
+            {showBookmarkedOnly && questions.every(q => !bookmarks.has(q.id)) && (
+              <p className="col-span-4 text-[11px] text-gray-400 text-center py-6">No bookmarked questions yet.</p>
+            )}
           </div>
         </div>
       </div>
