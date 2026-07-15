@@ -307,6 +307,12 @@ const PracticeTest: React.FC = () => {
               <Timer className="w-4 h-4 text-gray-500" />
               <span className="text-xs font-mono font-bold text-gray-700">{formatTime(timeLeft)}</span>
             </div>
+            <button
+              onClick={() => setShowCancelModal(true)}
+              className="px-4 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-xl text-xs font-bold transition-colors"
+            >
+              Cancel Test
+            </button>
             <button 
               onClick={() => handleSubmitTest(false)} 
               className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors"
@@ -386,6 +392,28 @@ const PracticeTest: React.FC = () => {
                 {idx + 1}
               </button>
             ))}
+          </div>
+          <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 gap-x-3 gap-y-2">
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-3.5 rounded-sm bg-emerald-600 shrink-0"></span>
+              <span className="text-[10px] font-semibold text-gray-500">Answered</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-3.5 rounded-sm bg-amber-500 shrink-0"></span>
+              <span className="text-[10px] font-semibold text-gray-500">Bookmarked</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-3.5 rounded-sm bg-white border border-gray-300 shrink-0"></span>
+              <span className="text-[10px] font-semibold text-gray-500">Not Visited</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-3.5 rounded-sm bg-gray-200 shrink-0"></span>
+              <span className="text-[10px] font-semibold text-gray-500">Visited</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-3.5 rounded-sm bg-blue-600 shrink-0"></span>
+              <span className="text-[10px] font-semibold text-gray-500">Active Selection</span>
+            </div>
           </div>
         </div>
       </div>
