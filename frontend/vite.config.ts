@@ -6,7 +6,7 @@ import { defineConfig } from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
-    base: './', // Ensures assets are loaded using relative paths (./assets/...)
+    base: '/', // Absolute paths so assets resolve correctly even when reloading nested routes like /practice/year/2023
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
