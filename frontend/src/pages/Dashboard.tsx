@@ -128,7 +128,7 @@ const Dashboard: React.FC = () => {
         }
       } catch (err) {
         console.error('Error fetching questions:', err);
-      } finaly {
+      } finally {
         setIsQuestionsLoading(false);
       }
     };
