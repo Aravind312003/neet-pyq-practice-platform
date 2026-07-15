@@ -26,7 +26,7 @@ async def get_questions(
     pageSize: int = Query(10, ge=1, le=100),
     db: Client = Depends(get_supabase)
 ):
-    query = db.table("questions").select("*", count="exact")
+    query = db.table("neet_questions").select("*", count="exact")
    
     if year:
         query = query.eq("year", year)
@@ -55,7 +55,7 @@ async def get_questions(
 
 @router.get("/random-test", response_model=TestQuestionsResponse)
 async def get_random_test(db: Client = Depends(get_supabase)):
-    id_res = db.table("questions").select("id").execute()
+    id_res = db.table("neet_questions").select("id").execute()
     if not id_res.data or len(id_res.data) < 180:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -65,7 +65,7 @@ async def get_random_test(db: Client = Depends(get_supabase)):
     all_ids = [record["id"] for record in id_res.data]
     selected_ids = random.sample(all_ids, 180)
     
-    questions_res = db.table("questions").select("*").in_("id", selected_ids).execute()
+    questions_res = db.table("neet_questions").select("*").in_("id", selected_ids).execute()
     shuffled_questions = questions_res.data
     random.shuffle(shuffled_questions)
     
@@ -77,13 +77,13 @@ async def get_subjects(db: Client = Depends(get_supabase)):
         res = db.rpc("get_unique_subjects", {}).execute()
         return {"subjects": res.data}
     except Exception:
-        res = db.table("questions").select("subject").execute()
+        res = db.table("neet_questions").select("subject").execute()
         unique_subs = list(set([record["subject"] for record in res.data if record.get("subject")]))
         return {"subjects": unique_subs}
 
 @router.get("/chapters", response_model=ChaptersResponse)
 async def get_chapters(subject: Optional[str] = Query(None), db: Client = Depends(get_supabase)):
-    query = db.table("questions").select("chapter")
+    query = db.table("neet_questions").select("chapter")
     if subject:
         query = query.eq("subject", subject)
     res = query.execute()
@@ -97,12 +97,12 @@ async def get_year_questions(year: int, db: Client = Depends(get_supabase)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid year. Papers are only available for 2020-2025"
         )
-    res = db.table("questions").select("*").eq("year", year).order("question_number", desc=False).execute()
+    res = db.table("neet_questions").select("*").eq("year", year).order("question_number", desc=False).execute()
     return {"questions": res.data}
 
 @router.get("/question/{id}", response_model=QuestionResponse)
 async def get_single_question(id: str, db: Client = Depends(get_supabase)):
-    res = db.table("questions").select("*").eq("id", id).maybe_single().execute()
+    res = db.table("neet_questions").select("*").eq("id", id).maybe_single().execute()
     if not res.data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
