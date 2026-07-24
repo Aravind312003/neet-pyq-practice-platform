@@ -609,13 +609,18 @@ app.get("/api/questions", rateLimiter(60, 60000), async (req: any, res) => {
         const { data, count, error } = await query;
         if (error) throw error;
 
-        return res.json({
-          questions: data || [],
-          total: count || 0,
-          page,
-          pageSize,
-          totalPages: Math.ceil((count || 0) / pageSize)
-        });
+        if (!data || data.length === 0) {
+          console.warn("[SUPABASE] Table 'questions' returned empty dataset. Forcing mock fallback.");
+          db = null;
+        } else {
+          return res.json({
+            questions: data || [],
+            total: count || 0,
+            page,
+            pageSize,
+            totalPages: Math.ceil((count || 0) / pageSize)
+          });
+        }
       } catch (dbErr: any) {
         console.warn(`[SUPABASE ERROR] questions query failed: ${dbErr.message || dbErr}. Automatically falling back to persistent local mode.`);
         useSupabaseFallback = true;
@@ -681,7 +686,13 @@ app.get("/api/questions/:year", rateLimiter(60, 60000), async (req, res) => {
           .order("question_number", { ascending: true });
 
         if (error) throw error;
-        return res.json({ questions: data || [] });
+        
+        if (!data || data.length === 0) {
+          console.warn(`[SUPABASE] Table 'questions' returned empty dataset for year ${year}. Forcing mock fallback.`);
+          db = null;
+        } else {
+          return res.json({ questions: data });
+        }
       } catch (dbErr: any) {
         console.warn(`[SUPABASE ERROR] year questions query failed: ${dbErr.message || dbErr}. Automatically falling back to persistent local mode.`);
         useSupabaseFallback = true;
@@ -762,9 +773,14 @@ app.get("/api/random-test", rateLimiter(20, 60000), async (req, res) => {
 
         if (error) throw error;
         
-        // Shuffle the detailed questions list to ensure absolute randomness
-        const shuffledQuestions = (data || []).sort(() => 0.5 - Math.random());
-        return res.json({ questions: shuffledQuestions });
+        if (!data || data.length === 0) {
+          console.warn("[RANDOM TEST] Supabase returned empty dataset. Forcing mock fallback.");
+          db = null;
+        } else {
+          // Shuffle the detailed questions list to ensure absolute randomness
+          const shuffledQuestions = (data || []).sort(() => 0.5 - Math.random());
+          return res.json({ questions: shuffledQuestions });
+        }
       } catch (dbErr: any) {
         console.warn(`[SUPABASE ERROR] random test query failed: ${dbErr.message || dbErr}. Automatically falling back to persistent local mode.`);
         useSupabaseFallback = true;
@@ -962,6 +978,55 @@ app.delete("/api/bookmark/:id", authenticateToken, async (req: any, res) => {
   } catch (error) {
     console.error("[BOOKMARK DELETE ERROR]", error);
     return res.status(500).json({ error: "Failed to delete bookmark" });
+  }
+});
+
+// Report an issue with a question
+app.post("/api/reports", async (req, res) => {
+  try {
+    const { questionId, questionNumber, year, subject, chapter, issueType, description, userEmail } = req.body;
+
+    if (!description || !description.trim()) {
+      return res.status(400).json({ error: "Please provide a description of the issue." });
+    }
+
+    const reportEntry = {
+      id: "rep_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
+      questionId: questionId || "N/A",
+      questionNumber: questionNumber || "N/A",
+      year: year || "N/A",
+      subject: subject || "N/A",
+      chapter: chapter || "N/A",
+      issueType: issueType || "Other Issue",
+      description: description.trim(),
+      userEmail: userEmail || "Anonymous",
+      createdAt: new Date().toISOString()
+    };
+
+    const LOCAL_REPORTS_FILE = path.join(process.cwd(), "database", "local_reports.json");
+    let reports: any[] = [];
+    try {
+      if (fs.existsSync(LOCAL_REPORTS_FILE)) {
+        reports = JSON.parse(fs.readFileSync(LOCAL_REPORTS_FILE, "utf-8"));
+      }
+    } catch (e) {
+      reports = [];
+    }
+
+    reports.push(reportEntry);
+
+    const dir = path.dirname(LOCAL_REPORTS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(LOCAL_REPORTS_FILE, JSON.stringify(reports, null, 2), "utf-8");
+
+    console.log(`[REPORT SUBMITTED] Question #${questionId} (Q${questionNumber}, Year: ${year}): ${issueType} - ${description}`);
+
+    return res.json({ success: true, message: "Report submitted successfully! Thank you for your feedback." });
+  } catch (err: any) {
+    console.error("[REPORT SUBMISSION ERROR]", err);
+    return res.status(500).json({ error: "Failed to submit report. Please try again." });
   }
 });
 
