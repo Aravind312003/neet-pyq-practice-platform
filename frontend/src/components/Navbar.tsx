@@ -52,7 +52,7 @@ const Navbar: React.FC = () => {
               }`}
             >
               <Bookmark className="w-4 h-4 text-blue-600" />
-              <span>Saved & Bookmarks</span>
+              <span>Saved & Reports</span>
             </Link>
           </div>
 

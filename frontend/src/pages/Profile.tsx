@@ -2,17 +2,39 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Question } from '../types';
 import { 
-  User, Mail, Calendar, Bookmark, Trash2, BookOpen, ChevronDown, ChevronUp, AlertCircle 
+  User, Mail, Calendar, Bookmark, Trash2, BookOpen, ChevronDown, ChevronUp, AlertCircle, Flag, MessageSquare
 } from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
+
+interface ReportItem {
+  id: string;
+  questionId: string | number;
+  questionNumber: string | number;
+  year: string | number;
+  subject: string;
+  chapter: string;
+  issueType: string;
+  description: string;
+  userEmail: string;
+  createdAt: string;
+  questionDetails?: Question | null;
+}
 
 const Profile: React.FC = () => {
   const { user, token } = useAuth();
 
-  // States
+  // Active Tab
+  const [activeTab, setActiveTab] = useState<'bookmarks' | 'reports'>('bookmarks');
+
+  // States for Bookmarks
   const [bookmarks, setBookmarks] = useState<string[]>([]);
   const [bookmarkedQuestions, setBookmarkedQuestions] = useState<Question[]>([]);
   const [expandedId, setExpandedId] = useState<string | number | null>(null);
+
+  // States for Reports
+  const [reports, setReports] = useState<ReportItem[]>([]);
+  const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
+  const [isDeletingReport, setIsDeletingReport] = useState<string | null>(null);
   
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState<string | number | null>(null);
@@ -29,55 +51,79 @@ const Profile: React.FC = () => {
   };
 
   useEffect(() => {
-    const fetchBookmarksAndDetails = async () => {
-      if (!token) {
-        setIsLoading(false);
-        return;
-      }
+    const fetchAllData = async () => {
+      setIsLoading(true);
 
       try {
-        // 1. Fetch bookmarked IDs
-        const res = await fetch('/api/bookmarks', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!res.ok) throw new Error('Failed to load bookmarks.');
+        // Fetch Bookmarks
+        if (token) {
+          const res = await fetch('/api/bookmarks', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const ids: string[] = data.bookmarks || [];
+            setBookmarks(ids);
 
-        const data = await res.json();
-        const ids: string[] = data.bookmarks || [];
-        setBookmarks(ids);
+            if (ids.length > 0) {
+              const questionPromises = ids.map(async (id) => {
+                try {
+                  const qRes = await fetch(`/api/question/${id}`);
+                  if (qRes.ok) {
+                    const qData = await qRes.json();
+                    return qData.question;
+                  }
+                } catch (err) {
+                  console.error(`Failed to fetch question ${id}:`, err);
+                }
+                return null;
+              });
 
-        if (ids.length === 0) {
-          setBookmarkedQuestions([]);
-          setIsLoading(false);
-          return;
+              const results = await Promise.all(questionPromises);
+              const validQuestions = results.filter((q): q is Question => q !== null);
+              setBookmarkedQuestions(validQuestions);
+            } else {
+              setBookmarkedQuestions([]);
+            }
+          }
         }
 
-        // 2. Fetch full question details for all IDs concurrently
-        const questionPromises = ids.map(async (id) => {
-          try {
-            const qRes = await fetch(`/api/question/${id}`);
-            if (qRes.ok) {
-              const qData = await qRes.json();
-              return qData.question;
-            }
-          } catch (err) {
-            console.error(`Failed to fetch question ${id}:`, err);
-          }
-          return null;
-        });
+        // Fetch Reports
+        const userEmail = user?.email || localStorage.getItem('neet_user_email') || '';
+        const repRes = await fetch(`/api/reports?email=${encodeURIComponent(userEmail)}`);
+        if (repRes.ok) {
+          const repData = await repRes.json();
+          const rawReports: ReportItem[] = repData.reports || [];
 
-        const results = await Promise.all(questionPromises);
-        const validQuestions = results.filter((q): q is Question => q !== null);
-        setBookmarkedQuestions(validQuestions);
+          // Optionally fetch question details for each report if missing text
+          const enrichedReports = await Promise.all(
+            rawReports.map(async (rep) => {
+              if (rep.questionId && rep.questionId !== 'N/A') {
+                try {
+                  const qRes = await fetch(`/api/question/${rep.questionId}`);
+                  if (qRes.ok) {
+                    const qData = await qRes.json();
+                    return { ...rep, questionDetails: qData.question };
+                  }
+                } catch (e) {
+                  // ignore error
+                }
+              }
+              return rep;
+            })
+          );
+
+          setReports(enrichedReports);
+        }
       } catch (err: any) {
-        triggerToast(err.message || 'Failed to load profile details.', 'error');
+        triggerToast(err.message || 'Failed to load details.', 'error');
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchBookmarksAndDetails();
-  }, [token]);
+    fetchAllData();
+  }, [token, user]);
 
   const handleDeleteBookmark = async (id: string | number) => {
     if (!token) return;
@@ -92,7 +138,6 @@ const Profile: React.FC = () => {
         throw new Error('Failed to remove bookmark.');
       }
 
-      // Update state
       setBookmarks(prev => prev.filter(bid => bid.toString() !== id.toString()));
       setBookmarkedQuestions(prev => prev.filter(q => q.id.toString() !== id.toString()));
       if (expandedId === id) setExpandedId(null);
@@ -105,11 +150,39 @@ const Profile: React.FC = () => {
     }
   };
 
+  const handleDeleteReport = async (reportId: string) => {
+    setIsDeletingReport(reportId);
+    try {
+      const res = await fetch(`/api/reports/${reportId}`, {
+        method: 'DELETE'
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to remove report.');
+      }
+
+      setReports(prev => prev.filter(r => r.id !== reportId));
+      triggerToast('Report entry removed successfully.', 'success');
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to delete report.', 'error');
+    } finally {
+      setIsDeletingReport(null);
+    }
+  };
+
   const toggleExpand = (id: string | number) => {
     if (expandedId === id) {
       setExpandedId(null);
     } else {
       setExpandedId(id);
+    }
+  };
+
+  const toggleExpandReport = (reportId: string) => {
+    if (expandedReportId === reportId) {
+      setExpandedReportId(null);
+    } else {
+      setExpandedReportId(reportId);
     }
   };
 
@@ -141,137 +214,291 @@ const Profile: React.FC = () => {
           </div>
         </div>
 
-        {/* Saved Bookmarks List */}
-        <div>
-          <div className="flex items-center gap-2 mb-4">
-            <Bookmark className="w-5 h-5 text-blue-600 fill-current" />
-            <h2 className="text-lg font-bold text-gray-900 font-sans tracking-tight">
-              Review Saved Bookmarks ({bookmarkedQuestions.length})
-            </h2>
-          </div>
+        {/* Tab Selector: Saved Bookmarks vs Reported Questions */}
+        <div className="flex border-b border-gray-200 mb-6 gap-6">
+          <button
+            onClick={() => setActiveTab('bookmarks')}
+            className={`pb-3 flex items-center gap-2 text-sm font-bold border-b-2 transition-colors cursor-pointer ${
+              activeTab === 'bookmarks'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <Bookmark className="w-4 h-4 fill-current" />
+            <span>Saved Bookmarks ({bookmarkedQuestions.length})</span>
+          </button>
 
-          {isLoading ? (
-            <div className="bg-white border border-gray-100 rounded-2xl p-12 flex flex-col items-center justify-center shadow-xs">
-              <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
-              <p className="text-xs text-gray-500">Compiling your bookmarks archive...</p>
-            </div>
-          ) : bookmarkedQuestions.length === 0 ? (
-            <div className="bg-white border border-gray-100 rounded-2xl p-12 text-center shadow-xs">
-              <div className="w-12 h-12 rounded-full bg-gray-50 border border-gray-100 flex items-center justify-center mx-auto mb-4 text-gray-400">
-                <Bookmark className="w-6 h-6" />
+          <button
+            onClick={() => setActiveTab('reports')}
+            className={`pb-3 flex items-center gap-2 text-sm font-bold border-b-2 transition-colors cursor-pointer ${
+              activeTab === 'reports'
+                ? 'border-rose-600 text-rose-600'
+                : 'border-transparent text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <Flag className="w-4 h-4 text-rose-600" />
+            <span>Reported Questions ({reports.length})</span>
+          </button>
+        </div>
+
+        {/* Tab 1: Saved Bookmarks List */}
+        {activeTab === 'bookmarks' && (
+          <div>
+            {isLoading ? (
+              <div className="bg-white border border-gray-100 rounded-2xl p-12 flex flex-col items-center justify-center shadow-xs">
+                <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
+                <p className="text-xs text-gray-500">Compiling your bookmarks archive...</p>
               </div>
-              <h3 className="text-sm font-bold text-gray-900 font-sans">No saved bookmarks</h3>
-              <p className="mt-1 text-xs text-gray-400 max-w-sm mx-auto leading-relaxed">
-                As you practice Yearly papers or Mock tests, you can bookmark tricky questions. They will appear here for you to revise later.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {bookmarkedQuestions.map((q) => {
-                const isExpanded = expandedId === q.id;
-                return (
-                  <div 
-                    key={q.id}
-                    className={`bg-white border border-gray-100 rounded-xl shadow-xs overflow-hidden transition-all duration-200 ${
-                      isExpanded ? 'ring-1 ring-blue-100 border-blue-200' : ''
-                    }`}
-                  >
-                    {/* Accordion Trigger Header */}
+            ) : bookmarkedQuestions.length === 0 ? (
+              <div className="bg-white border border-gray-100 rounded-2xl p-12 text-center shadow-xs">
+                <div className="w-12 h-12 rounded-full bg-gray-50 border border-gray-100 flex items-center justify-center mx-auto mb-4 text-gray-400">
+                  <Bookmark className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-gray-900 font-sans">No saved bookmarks</h3>
+                <p className="mt-1 text-xs text-gray-400 max-w-sm mx-auto leading-relaxed">
+                  As you practice Yearly papers or Mock tests, you can bookmark tricky questions. They will appear here for you to revise later.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {bookmarkedQuestions.map((q) => {
+                  const isExpanded = expandedId === q.id;
+                  return (
                     <div 
-                      onClick={() => toggleExpand(q.id)}
-                      className="p-5 flex items-start gap-4 justify-between cursor-pointer hover:bg-gray-50/50 transition-colors"
+                      key={q.id}
+                      className={`bg-white border border-gray-100 rounded-xl shadow-xs overflow-hidden transition-all duration-200 ${
+                        isExpanded ? 'ring-1 ring-blue-100 border-blue-200' : ''
+                      }`}
                     >
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[10px] font-bold font-mono uppercase bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md">
-                            {q.subject}
-                          </span>
-                          <span className="text-[10px] font-bold font-mono text-gray-400">
-                            NEET {q.year} • Q{q.question_number}
-                          </span>
+                      {/* Accordion Trigger Header */}
+                      <div 
+                        onClick={() => toggleExpand(q.id)}
+                        className="p-5 flex items-start gap-4 justify-between cursor-pointer hover:bg-gray-50/50 transition-colors"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[10px] font-bold font-mono uppercase bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md">
+                              {q.subject}
+                            </span>
+                            <span className="text-[10px] font-bold font-mono text-gray-400">
+                              NEET {q.year} • Q{q.question_number}
+                            </span>
+                          </div>
+                          <p className="text-sm font-semibold text-gray-800 line-clamp-2 leading-relaxed">
+                            {q.question}
+                          </p>
                         </div>
-                        <p className="text-sm font-semibold text-gray-800 line-clamp-2 leading-relaxed">
-                          {q.question}
-                        </p>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteBookmark(q.id);
+                            }}
+                            disabled={isDeleting === q.id}
+                            className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-600 transition-colors cursor-pointer"
+                            title="Remove bookmark"
+                          >
+                            {isDeleting === q.id ? (
+                              <div className="w-4 h-4 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+
+                          <div className="text-gray-400">
+                            {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteBookmark(q.id);
-                          }}
-                          disabled={isDeleting === q.id}
-                          className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-600 transition-colors"
-                          title="Remove bookmark"
-                        >
-                          {isDeleting === q.id ? (
-                            <div className="w-4 h-4 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></div>
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
+                      {/* Expandable Body */}
+                      {isExpanded && (
+                        <div className="px-5 pb-5 pt-1 border-t border-gray-50 space-y-4 bg-gray-50/20">
+                          {/* Question Text */}
+                          <div className="text-sm font-semibold text-gray-800 leading-relaxed whitespace-pre-line">
+                            {q.question}
+                          </div>
+
+                          {/* Options */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                            {[
+                              { key: 'A', text: q.option_a },
+                              { key: 'B', text: q.option_b },
+                              { key: 'C', text: q.option_c },
+                              { key: 'D', text: q.option_d },
+                            ].map(({ key, text }) => {
+                              const isCorrect = key === q.correct_answer;
+                              return (
+                                <div 
+                                  key={key}
+                                  className={`p-3 rounded-lg border text-xs font-medium flex gap-2.5 leading-normal ${
+                                    isCorrect 
+                                      ? 'bg-emerald-50/50 border-emerald-200 text-emerald-800' 
+                                      : 'bg-white border-gray-100 text-gray-600'
+                                  }`}
+                                >
+                                  <span className={`w-5 h-5 rounded-md flex items-center justify-center font-bold font-mono text-[10px] shrink-0 ${
+                                    isCorrect 
+                                      ? 'bg-emerald-600 text-white' 
+                                      : 'bg-gray-100 text-gray-500'
+                                  }`}>
+                                    {key}
+                                  </span>
+                                  <span>{text}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Explanation block */}
+                          {q.explanation && (
+                            <div className="bg-blue-50/30 border border-blue-50 rounded-xl p-4 text-xs leading-relaxed text-gray-600">
+                              <span className="font-bold text-blue-800 font-sans block mb-1">Answer Explanation:</span>
+                              <p className="whitespace-pre-line">{q.explanation}</p>
+                            </div>
                           )}
-                        </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
-                        <div className="text-gray-400">
-                          {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+        {/* Tab 2: Reported Questions List */}
+        {activeTab === 'reports' && (
+          <div>
+            {isLoading ? (
+              <div className="bg-white border border-gray-100 rounded-2xl p-12 flex flex-col items-center justify-center shadow-xs">
+                <div className="w-8 h-8 border-3 border-rose-600 border-t-transparent rounded-full animate-spin mb-3"></div>
+                <p className="text-xs text-gray-500">Fetching reported questions list...</p>
+              </div>
+            ) : reports.length === 0 ? (
+              <div className="bg-white border border-gray-100 rounded-2xl p-12 text-center shadow-xs">
+                <div className="w-12 h-12 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center mx-auto mb-4 text-rose-500">
+                  <Flag className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-gray-900 font-sans">No reported questions</h3>
+                <p className="mt-1 text-xs text-gray-400 max-w-sm mx-auto leading-relaxed">
+                  When you report errors or answer key issues during practice tests, your reported items and text box comments will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {reports.map((rep) => {
+                  const isExpanded = expandedReportId === rep.id;
+                  const formattedDate = new Date(rep.createdAt).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
+
+                  return (
+                    <div 
+                      key={rep.id}
+                      className={`bg-white border border-gray-100 rounded-xl shadow-xs overflow-hidden transition-all duration-200 ${
+                        isExpanded ? 'ring-1 ring-rose-200 border-rose-200' : ''
+                      }`}
+                    >
+                      {/* Header */}
+                      <div 
+                        onClick={() => toggleExpandReport(rep.id)}
+                        className="p-5 flex items-start gap-4 justify-between cursor-pointer hover:bg-gray-50/50 transition-colors"
+                      >
+                        <div className="space-y-2 flex-1">
+                          {/* Badges: Question No, Year, Issue Type */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[11px] font-bold font-mono bg-rose-50 text-rose-700 px-2.5 py-0.5 rounded-md border border-rose-100">
+                              Question No: Q{rep.questionNumber}
+                            </span>
+                            <span className="text-[11px] font-bold font-mono bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-md border border-blue-100">
+                              Year: NEET {rep.year}
+                            </span>
+                            <span className="text-[11px] font-semibold bg-gray-100 text-gray-700 px-2.5 py-0.5 rounded-md border border-gray-200">
+                              {rep.issueType}
+                            </span>
+                            <span className="text-[10px] text-gray-400 font-mono">
+                              {rep.subject} {rep.chapter !== 'N/A' ? `• ${rep.chapter}` : ''}
+                            </span>
+                          </div>
+
+                          {/* Student Description Note */}
+                          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-xs text-slate-800 font-sans leading-relaxed">
+                            <div className="flex items-center gap-1.5 text-slate-500 font-bold text-[11px] mb-1">
+                              <MessageSquare className="w-3.5 h-3.5 text-rose-500" />
+                              <span>Your Note / Submitted Description:</span>
+                            </div>
+                            <p className="text-slate-900 font-medium whitespace-pre-line">
+                              "{rep.description}"
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[10px] text-gray-400 hidden sm:inline">
+                            {formattedDate}
+                          </span>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteReport(rep.id);
+                            }}
+                            disabled={isDeletingReport === rep.id}
+                            className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-600 transition-colors cursor-pointer"
+                            title="Remove report entry"
+                          >
+                            {isDeletingReport === rep.id ? (
+                              <div className="w-4 h-4 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+
+                          <div className="text-gray-400">
+                            {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Expandable Body */}
-                    {isExpanded && (
-                      <div className="px-5 pb-5 pt-1 border-t border-gray-50 space-y-4 bg-gray-50/20">
-                        {/* Question Text */}
-                        <div className="text-sm font-semibold text-gray-800 leading-relaxed whitespace-pre-line">
-                          {q.question}
-                        </div>
+                      {/* Expandable details if available */}
+                      {isExpanded && rep.questionDetails && (
+                        <div className="px-5 pb-5 pt-2 border-t border-gray-100 bg-slate-50/50 space-y-3">
+                          <span className="text-xs font-bold text-gray-700 font-sans block">
+                            Full Question Content:
+                          </span>
+                          <div className="text-xs font-semibold text-gray-800 leading-relaxed whitespace-pre-line bg-white p-3.5 rounded-xl border border-gray-200">
+                            {rep.questionDetails.question}
+                          </div>
 
-                        {/* Options */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                          {[
-                            { key: 'A', text: q.option_a },
-                            { key: 'B', text: q.option_b },
-                            { key: 'C', text: q.option_c },
-                            { key: 'D', text: q.option_d },
-                          ].map(({ key, text }) => {
-                            const isCorrect = key === q.correct_answer;
-                            return (
-                              <div 
-                                key={key}
-                                className={`p-3 rounded-lg border text-xs font-medium flex gap-2.5 leading-normal ${
-                                  isCorrect 
-                                    ? 'bg-emerald-50/50 border-emerald-200 text-emerald-800' 
-                                    : 'bg-white border-gray-100 text-gray-600'
-                                }`}
-                              >
-                                <span className={`w-5 h-5 rounded-md flex items-center justify-center font-bold font-mono text-[10px] shrink-0 ${
-                                  isCorrect 
-                                    ? 'bg-emerald-600 text-white' 
-                                    : 'bg-gray-100 text-gray-500'
-                                }`}>
-                                  {key}
-                                </span>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {[
+                              { key: 'A', text: rep.questionDetails.option_a },
+                              { key: 'B', text: rep.questionDetails.option_b },
+                              { key: 'C', text: rep.questionDetails.option_c },
+                              { key: 'D', text: rep.questionDetails.option_d },
+                            ].map(({ key, text }) => (
+                              <div key={key} className="p-2.5 rounded-lg bg-white border border-gray-200 text-xs text-gray-700 flex gap-2">
+                                <span className="font-bold text-gray-500 font-mono">{key}.</span>
                                 <span>{text}</span>
                               </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* Explanation block */}
-                        {q.explanation && (
-                          <div className="bg-blue-50/30 border border-blue-50 rounded-xl p-4 text-xs leading-relaxed text-gray-600">
-                            <span className="font-bold text-blue-800 font-sans block mb-1">Answer Explanation:</span>
-                            <p className="whitespace-pre-line">{q.explanation}</p>
+                            ))}
                           </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
       </div>
 
@@ -286,3 +513,4 @@ const Profile: React.FC = () => {
 };
 
 export default Profile;
+

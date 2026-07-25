@@ -1030,6 +1030,56 @@ app.post("/api/reports", async (req, res) => {
   }
 });
 
+// Get reports (filtered by user email if provided)
+app.get("/api/reports", async (req, res) => {
+  try {
+    const { email } = req.query;
+    const LOCAL_REPORTS_FILE = path.join(process.cwd(), "database", "local_reports.json");
+    let reports: any[] = [];
+    if (fs.existsSync(LOCAL_REPORTS_FILE)) {
+      try {
+        reports = JSON.parse(fs.readFileSync(LOCAL_REPORTS_FILE, "utf-8"));
+      } catch (e) {
+        reports = [];
+      }
+    }
+
+    if (email) {
+      const userReports = reports.filter(r => 
+        r.userEmail && String(r.userEmail).toLowerCase() === String(email).toLowerCase()
+      );
+      return res.json({ reports: userReports });
+    }
+
+    return res.json({ reports });
+  } catch (err: any) {
+    console.error("[GET REPORTS ERROR]", err);
+    return res.status(500).json({ error: "Failed to fetch reports." });
+  }
+});
+
+// Delete a report by ID
+app.delete("/api/reports/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const LOCAL_REPORTS_FILE = path.join(process.cwd(), "database", "local_reports.json");
+    if (fs.existsSync(LOCAL_REPORTS_FILE)) {
+      let reports: any[] = [];
+      try {
+        reports = JSON.parse(fs.readFileSync(LOCAL_REPORTS_FILE, "utf-8"));
+      } catch (e) {
+        reports = [];
+      }
+      reports = reports.filter(r => r.id !== id);
+      fs.writeFileSync(LOCAL_REPORTS_FILE, JSON.stringify(reports, null, 2), "utf-8");
+    }
+    return res.json({ success: true, message: "Report deleted successfully" });
+  } catch (err: any) {
+    console.error("[DELETE REPORT ERROR]", err);
+    return res.status(500).json({ error: "Failed to delete report" });
+  }
+});
+
 
 // Centralized error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

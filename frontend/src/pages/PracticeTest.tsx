@@ -3,12 +3,9 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Question } from '../types';
 import { 
-  Timer, Bookmark, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, XCircle, Flag, X, Send, AlertCircle
+  Timer, Bookmark, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, Eye, RotateCcw, XCircle, Flag, X, Send, AlertCircle
 } from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
-
-// Central API Base URL pointing to your live Render instance
-const API_BASE = 'https://neet-pyq-practice-platform.onrender.com/api';
 
 const PracticeTest: React.FC = () => {
   const { type, id } = useParams<{ type: string; id: string }>();
@@ -24,7 +21,7 @@ const PracticeTest: React.FC = () => {
   const [answers, setAnswers] = useState<{ [key: string]: string }>({});
   const [bookmarks, setBookmarks] = useState<Set<string | number>>(new Set());
   const [visited, setVisited] = useState<Set<number>>(new Set([0]));
-  const [, setRevealedAnswers] = useState<Set<number>>(new Set());
+  const [revealedAnswers, setRevealedAnswers] = useState<Set<number>>(new Set());
 
   // Palette Filter
   const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false);
@@ -46,6 +43,8 @@ const PracticeTest: React.FC = () => {
   const [reportDescription, setReportDescription] = useState('');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [reportedQuestionIds, setReportedQuestionIds] = useState<Set<string | number>>(new Set());
+  const [showReportedOnly, setShowReportedOnly] = useState(false);
 
   // Toast System
   const [toastMessage, setToastMessage] = useState('');
@@ -57,8 +56,6 @@ const PracticeTest: React.FC = () => {
     setToastType(type);
     setShowToast(true);
   };
-
-  const activeQuestion = questions[currentIndex];
 
   const handleOpenReport = () => {
     setReportIssueType('Wrong Answer Key');
@@ -79,11 +76,10 @@ const PracticeTest: React.FC = () => {
 
     try {
       const userEmail = localStorage.getItem('neet_user_email') || 'User';
-      const response = await fetch(`${API_BASE}/reports`, {
+      const response = await fetch('/api/reports', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
           questionId: activeQuestion?.id,
@@ -102,6 +98,10 @@ const PracticeTest: React.FC = () => {
         throw new Error(data.error || 'Failed to submit report.');
       }
 
+      if (activeQuestion) {
+        setReportedQuestionIds(prev => new Set(prev).add(activeQuestion.id));
+      }
+
       triggerToast('Report submitted successfully! Thank you for your feedback.', 'success');
       setShowReportModal(false);
       setReportDescription('');
@@ -111,6 +111,8 @@ const PracticeTest: React.FC = () => {
       setIsSubmittingReport(false);
     }
   };
+
+  const activeQuestion = questions[currentIndex];
 
   // Sync Timer and Progress to localStorage on load/refresh
   useEffect(() => {
@@ -149,9 +151,9 @@ const PracticeTest: React.FC = () => {
           // Fetch fresh questions from API
           let url = '';
           if (type === 'year') {
-            url = `${API_BASE}/questions/${id}`;
+            url = `/api/questions/${id}?pageSize=180`;
           } else {
-            url = `${API_BASE}/questions/random-test`;
+            url = '/api/random-test';
           }
 
           const response = await fetch(url);
@@ -170,13 +172,13 @@ const PracticeTest: React.FC = () => {
           // Pre-populate bookmarks from user saved list if available
           if (token) {
             try {
-              const bResponse = await fetch(`${API_BASE}/bookmarks`, {
+              const bResponse = await fetch('/api/bookmarks', {
                 headers: { 'Authorization': `Bearer ${token}` }
               });
               if (bResponse.ok) {
                 const bData = await bResponse.json();
                 const initialBookmarks = new Set<string | number>();
-                (bData.bookmarks || []).forEach((bid: string | number) => {
+                bData.bookmarks.forEach((bid: string | number) => {
                   if (loadedQuestions.some((q: Question) => q.id.toString() === bid.toString())) {
                     initialBookmarks.add(bid);
                   }
@@ -248,7 +250,7 @@ const PracticeTest: React.FC = () => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isLoading, questions, isReviewMode]);
+  }, [isLoading, questions]);
 
   // Mark current question as visited
   useEffect(() => {
@@ -313,7 +315,7 @@ const PracticeTest: React.FC = () => {
 
     if (token) {
       try {
-        const url = `${API_BASE}/bookmark/${qId}`;
+        const url = `/api/bookmark/${qId}`;
         await fetch(url, {
           method: isBookmarked ? 'DELETE' : 'POST',
           headers: {
@@ -324,6 +326,15 @@ const PracticeTest: React.FC = () => {
         console.error('Failed to sync bookmark:', err);
       }
     }
+  };
+
+  // Reveal Answer for active question
+  const handleRevealAnswer = () => {
+    setRevealedAnswers(prev => {
+      const next = new Set(prev);
+      next.add(currentIndex);
+      return next;
+    });
   };
 
   // Jump to specific index from sidebar palette
@@ -344,10 +355,11 @@ const PracticeTest: React.FC = () => {
     }
   };
 
-  // Cancel Practice Test
+  // Cancel Practice Test - early termination triggers compilation so candidate can review the paper
   const handleCancelTest = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     
+    // Clear running state
     const localKey = `neet_test_state_${type}_${id}`;
     localStorage.removeItem(localKey);
 
@@ -371,9 +383,11 @@ const PracticeTest: React.FC = () => {
     const score = (correctCount * 4) - (wrongCount * 1);
     const totalPotentialScore = questions.length * 4;
     const percentage = Math.max(0, parseFloat(((score / totalPotentialScore) * 100).toFixed(1)));
+    
     const totalAnswered = correctCount + wrongCount;
     const accuracy = totalAnswered > 0 ? parseFloat(((correctCount / totalAnswered) * 100).toFixed(1)) : 0;
-    const timeTaken = 10800 - timeLeft;
+    
+    const timeTaken = 10800 - timeLeft; // 3 hours - remaining
 
     const finalResult = {
       correct: correctCount,
@@ -389,7 +403,14 @@ const PracticeTest: React.FC = () => {
     };
 
     localStorage.setItem('neet_latest_test_result', JSON.stringify(finalResult));
-    const reviewData = { questions, answers, type, id };
+
+    // Save review state so user can view solutions
+    const reviewData = {
+      questions,
+      answers,
+      type,
+      id
+    };
     localStorage.setItem('neet_latest_test_review', JSON.stringify(reviewData));
 
     setTimeout(() => {
@@ -419,9 +440,11 @@ const PracticeTest: React.FC = () => {
     const score = (correctCount * 4) - (wrongCount * 1);
     const totalPotentialScore = questions.length * 4;
     const percentage = Math.max(0, parseFloat(((score / totalPotentialScore) * 100).toFixed(1)));
+    
     const totalAnswered = correctCount + wrongCount;
     const accuracy = totalAnswered > 0 ? parseFloat(((correctCount / totalAnswered) * 100).toFixed(1)) : 0;
-    const timeTaken = 10800 - timeLeft;
+    
+    const timeTaken = 10800 - timeLeft; // 3 hours - remaining
 
     const finalResult = {
       correct: correctCount,
@@ -437,9 +460,17 @@ const PracticeTest: React.FC = () => {
     };
 
     localStorage.setItem('neet_latest_test_result', JSON.stringify(finalResult));
-    const reviewData = { questions, answers, type, id };
+
+    // Save review state as well so user can view solutions
+    const reviewData = {
+      questions,
+      answers,
+      type,
+      id
+    };
     localStorage.setItem('neet_latest_test_review', JSON.stringify(reviewData));
     
+    // Delete running state
     const localKey = `neet_test_state_${type}_${id}`;
     localStorage.removeItem(localKey);
 
@@ -501,13 +532,18 @@ const PracticeTest: React.FC = () => {
     );
   }
 
+  // Filter the questions list for Palette view if requested
   const filteredPaletteIndexes = questions
     .map((q, idx) => ({ q, idx }))
-    .filter(item => !showBookmarkedOnly || bookmarks.has(item.q.id));
+    .filter(item => {
+      if (showBookmarkedOnly && !bookmarks.has(item.q.id)) return false;
+      if (showReportedOnly && !reportedQuestionIds.has(item.q.id)) return false;
+      return true;
+    });
 
   return (
     <div className="min-h-screen bg-gray-50/50 flex flex-col">
-      {/* Sub-header/Timer Strip */}
+      {/* Dynamic Sub-header/Timer Strip */}
       <div className="bg-white border-b border-gray-100 py-3.5 sticky top-0 z-40 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -561,218 +597,245 @@ const PracticeTest: React.FC = () => {
         </div>
       </div>
 
-      {/* Responsive Two-Column Layout */}
+      {/* Main Responsive Two-Column Layout (70% Question, 30% Palette) */}
       <div className="max-w-7xl mx-auto px-4 py-6 flex-1 w-full">
         <div className="grid grid-cols-1 md:grid-cols-10 gap-6 items-start">
           
-          {/* Active Question Card (70%) */}
+          {/* Left Side: Active Question Card (70%) */}
           <div className="md:col-span-7">
             <div className="bg-white border border-gray-100 rounded-2xl p-6 md:p-8 shadow-xs relative flex flex-col justify-between">
-              <div>
-                <div className="flex justify-between items-start mb-6 gap-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="px-2.5 py-0.5 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded">
-                      {activeQuestion.subject}
-                    </span>
-                    <span className="px-2.5 py-0.5 text-xs font-semibold text-gray-600 bg-gray-50 border border-gray-100 rounded">
-                      {activeQuestion.chapter}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={handleOpenReport}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 hover:bg-rose-100 transition-colors rounded-lg cursor-pointer"
-                      title="Report an issue with this question"
-                    >
-                      <Flag className="w-3.5 h-3.5" />
-                      <span>Report</span>
-                    </button>
-
-                    <button
-                      onClick={handleToggleBookmark}
-                      className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
-                        bookmarks.has(activeQuestion.id)
-                          ? 'bg-amber-50 text-amber-500 border-amber-200'
-                          : 'bg-white text-gray-400 border-gray-200 hover:text-gray-900'
-                      }`}
-                      title="Toggle Saved Bookmark"
-                    >
-                      <Bookmark className={`w-4.5 h-4.5 ${bookmarks.has(activeQuestion.id) ? 'fill-current' : ''}`} />
-                    </button>
-                  </div>
-                </div>
-
-                <h3 className="text-base md:text-lg font-bold text-gray-900 leading-relaxed font-sans mb-8">
-                  <span className="text-blue-600 mr-2">Q{currentIndex + 1}.</span>
-                  [NEET {activeQuestion.year}] {activeQuestion.question}
-                </h3>
-
-                <div className="space-y-3.5">
-                  {[
-                    { key: 'A', text: activeQuestion.option_a },
-                    { key: 'B', text: activeQuestion.option_b },
-                    { key: 'C', text: activeQuestion.option_c },
-                    { key: 'D', text: activeQuestion.option_d }
-                  ].map((opt) => {
-                    const isSelected = answers[activeQuestion.id.toString()] === opt.key;
-                    const isCorrect = opt.key === activeQuestion.correct_answer;
-
-                    let optionClass = 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300';
-                    let badgeClass = 'bg-gray-100 border border-gray-200 text-gray-500';
-
-                    if (isReviewMode) {
-                      if (isCorrect) {
-                        optionClass = 'bg-emerald-50 border-emerald-400 text-emerald-900 font-medium shadow-xs';
-                        badgeClass = 'bg-emerald-600 text-white';
-                      } else if (isSelected) {
-                        optionClass = 'bg-red-50 border-red-400 text-red-900 font-medium shadow-xs';
-                        badgeClass = 'bg-red-600 text-white';
-                      }
-                    } else {
-                      if (isSelected) {
-                        optionClass = 'bg-blue-50 border-blue-500 text-blue-900 font-semibold shadow-xs';
-                        badgeClass = 'bg-blue-600 text-white';
-                      }
-                    }
-
-                    return (
-                      <button
-                        key={opt.key}
-                        onClick={() => !isReviewMode && handleSelectOption(opt.key)}
-                        disabled={isReviewMode}
-                        className={`w-full text-left p-4 rounded-xl border text-sm font-sans flex items-center gap-4 transition-all ${
-                          isReviewMode ? 'cursor-default' : 'cursor-pointer'
-                        } ${optionClass}`}
-                      >
-                        <span className={`w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center transition-colors shrink-0 ${badgeClass}`}>
-                          {opt.key}
-                        </span>
-                        <span>{opt.text}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+          <div>
+            {/* Subject/Chapter and Bookmark/Report triggers */}
+            <div className="flex justify-between items-start mb-6 gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-2.5 py-0.5 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded">
+                  {activeQuestion.subject}
+                </span>
+                <span className="px-2.5 py-0.5 text-xs font-semibold text-gray-600 bg-gray-50 border border-gray-100 rounded">
+                  {activeQuestion.chapter}
+                </span>
               </div>
 
-              {isReviewMode && (
-                <div className="mt-8 p-5 bg-emerald-50/50 border border-emerald-100 rounded-xl">
-                  <div className="flex items-center gap-2 mb-2 text-emerald-800">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                    <span className="font-bold text-sm">Correct Answer: {activeQuestion.correct_answer}</span>
-                  </div>
-                  <p className="text-xs text-emerald-950 font-sans leading-relaxed whitespace-pre-line">
-                    <span className="font-bold">Explanation:</span> {activeQuestion.explanation}
-                  </p>
-                </div>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={handleOpenReport}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 hover:bg-rose-100 transition-colors rounded-lg cursor-pointer"
+                  title="Report an issue with this question"
+                >
+                  <Flag className="w-3.5 h-3.5" />
+                  <span>Report</span>
+                </button>
 
-              <div className="mt-10 pt-6 border-t border-gray-100 flex flex-wrap gap-3 items-center justify-between">
-                <div className="flex gap-2">
-                  {!isReviewMode ? (
-                    <button
-                      onClick={handleClearSelection}
-                      className="px-3.5 py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors cursor-pointer"
-                    >
-                      Clear Selection
-                    </button>
-                  ) : (
-                    <span className="text-xs text-gray-400 italic font-semibold">Reviewing answers</span>
-                  )}
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={handlePrev}
-                    disabled={currentIndex === 0}
-                    className="px-4 py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors flex items-center gap-1 cursor-pointer"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    Previous
-                  </button>
-                  <button
-                    onClick={handleNext}
-                    disabled={currentIndex === questions.length - 1}
-                    className="px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-1 cursor-pointer"
-                  >
-                    Next
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
+                <button
+                  onClick={handleToggleBookmark}
+                  className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                    bookmarks.has(activeQuestion.id)
+                      ? 'bg-amber-50 text-amber-500 border-amber-200'
+                      : 'bg-white text-gray-400 border-gray-200 hover:text-gray-900'
+                  }`}
+                  title="Toggle Saved Bookmark"
+                >
+                  <Bookmark className={`w-4.5 h-4.5 ${bookmarks.has(activeQuestion.id) ? 'fill-current' : ''}`} />
+                </button>
               </div>
+            </div>
+
+            {/* Question Heading Statement */}
+            <h3 className="text-base md:text-lg font-bold text-gray-900 leading-relaxed font-sans mb-8">
+              <span className="text-blue-600 mr-2">Q{currentIndex + 1}.</span>
+              [NEET {activeQuestion.year}] {activeQuestion.question}
+            </h3>
+
+            {/* Multiple Choice Options List */}
+            <div className="space-y-3.5">
+              {[
+                { key: 'A', text: activeQuestion.option_a },
+                { key: 'B', text: activeQuestion.option_b },
+                { key: 'C', text: activeQuestion.option_c },
+                { key: 'D', text: activeQuestion.option_d }
+              ].map((opt) => {
+                const isSelected = answers[activeQuestion.id.toString()] === opt.key;
+                const isCorrect = opt.key === activeQuestion.correct_answer;
+
+                let optionClass = 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300';
+                let badgeClass = 'bg-gray-100 border border-gray-200 text-gray-500';
+
+                if (isReviewMode) {
+                  if (isCorrect) {
+                    optionClass = 'bg-emerald-50 border-emerald-400 text-emerald-900 font-medium shadow-xs';
+                    badgeClass = 'bg-emerald-600 text-white';
+                  } else if (isSelected) {
+                    optionClass = 'bg-red-50 border-red-400 text-red-900 font-medium shadow-xs';
+                    badgeClass = 'bg-red-600 text-white';
+                  }
+                } else {
+                  if (isSelected) {
+                    optionClass = 'bg-blue-50 border-blue-500 text-blue-900 font-semibold shadow-xs';
+                    badgeClass = 'bg-blue-600 text-white';
+                  }
+                }
+
+                return (
+                  <button
+                    key={opt.key}
+                    onClick={() => !isReviewMode && handleSelectOption(opt.key)}
+                    disabled={isReviewMode}
+                    className={`w-full text-left p-4 rounded-xl border text-sm font-sans flex items-center gap-4 transition-all ${
+                      isReviewMode ? 'cursor-default' : 'cursor-pointer'
+                    } ${optionClass}`}
+                  >
+                    <span className={`w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center transition-colors shrink-0 ${badgeClass}`}>
+                      {opt.key}
+                    </span>
+                    <span>{opt.text}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Question Palette container (30%) */}
-          <div className="md:col-span-3 md:sticky md:top-24">
-            <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-xs flex flex-col gap-4">
-              <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-                <h4 className="font-bold text-gray-900 font-sans text-sm">
-                  Question Palette
-                </h4>
-                
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="bookmarkedOnly"
-                    checked={showBookmarkedOnly}
-                    onChange={(e) => setShowBookmarkedOnly(e.target.checked)}
-                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300 cursor-pointer"
-                  />
-                  <label htmlFor="bookmarkedOnly" className="text-xs font-bold text-gray-600 select-none cursor-pointer">
-                    Show Bookmarks Only
-                  </label>
-                </div>
+          {/* Explanation block (revealed) */}
+          {isReviewMode && (
+            <div className="mt-8 p-5 bg-emerald-50/50 border border-emerald-100 rounded-xl">
+              <div className="flex items-center gap-2 mb-2 text-emerald-800">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                <span className="font-bold text-sm">Correct Answer: {activeQuestion.correct_answer}</span>
               </div>
+              <p className="text-xs text-emerald-950 font-sans leading-relaxed whitespace-pre-line">
+                <span className="font-bold">Explanation:</span> {activeQuestion.explanation}
+              </p>
+            </div>
+          )}
 
-              <div className="flex flex-wrap items-center gap-y-2 gap-x-4 pb-1 text-xs font-semibold text-gray-500 font-sans">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3.5 h-3.5 rounded bg-emerald-600" />
-                  <span>Answered</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3.5 h-3.5 rounded bg-amber-500" />
-                  <span>Bookmarked</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3.5 h-3.5 rounded bg-gray-200" />
-                  <span>Visited</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3.5 h-3.5 rounded bg-white border border-gray-200" />
-                  <span>Not Visited</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3.5 h-3.5 rounded ring-2 ring-blue-600 ring-offset-2 bg-blue-600" />
-                  <span>Active Selection</span>
-                </div>
-              </div>
+          {/* Action toolbar */}
+          <div className="mt-10 pt-6 border-t border-gray-100 flex flex-wrap gap-3 items-center justify-between">
+            <div className="flex gap-2">
+              {!isReviewMode ? (
+                <button
+                  onClick={handleClearSelection}
+                  className="px-3.5 py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  Clear Selection
+                </button>
+              ) : (
+                <span className="text-xs text-gray-400 italic font-semibold">Reviewing answers</span>
+              )}
+            </div>
 
-              <div className="pt-2">
-                {filteredPaletteIndexes.length === 0 ? (
-                  <div className="py-6 text-center text-xs text-gray-400 font-sans">
-                    No questions match your active filters.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-                    {filteredPaletteIndexes.map(({ q, idx }) => (
-                      <button
-                        key={q.id}
-                        onClick={() => handleJumpQuestion(idx)}
-                        className={`h-9 w-full rounded-lg text-xs font-bold font-mono transition-all flex items-center justify-center cursor-pointer ${getPaletteStatusColor(idx)}`}
-                      >
-                        {idx + 1}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handlePrev}
+                disabled={currentIndex === 0}
+                className="px-4 py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors flex items-center gap-1 cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Previous
+              </button>
+              <button
+                onClick={handleNext}
+                disabled={currentIndex === questions.length - 1}
+                className="px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-1 cursor-pointer"
+              >
+                Next
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Cancel Test Modal */}
+      {/* Right Side: Question Palette container (30%) */}
+      <div className="md:col-span-3 md:sticky md:top-24">
+          <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-xs flex flex-col gap-4">
+          <div className="flex flex-col gap-2 pb-3 border-b border-gray-100">
+            <h4 className="font-bold text-gray-900 font-sans text-sm">
+              Question Palette
+            </h4>
+            
+            {/* Show Bookmarks & Reported filters */}
+            <div className="flex items-center gap-3 text-xs font-bold font-sans">
+              <label className="flex items-center gap-1.5 cursor-pointer text-gray-600 hover:text-gray-900">
+                <input
+                  type="checkbox"
+                  id="bookmarkedOnly"
+                  checked={showBookmarkedOnly}
+                  onChange={(e) => setShowBookmarkedOnly(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-blue-500 border-gray-300 cursor-pointer"
+                />
+                <span>Bookmarks Only</span>
+              </label>
+
+              <label className="flex items-center gap-1.5 cursor-pointer text-rose-600 hover:text-rose-800">
+                <input
+                  type="checkbox"
+                  id="reportedOnly"
+                  checked={showReportedOnly}
+                  onChange={(e) => setShowReportedOnly(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded text-rose-600 focus:ring-rose-500 border-gray-300 cursor-pointer"
+                />
+                <span>Reported ({reportedQuestionIds.size})</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Colors Legend */}
+          <div className="flex flex-wrap items-center gap-y-2 gap-x-4 pb-1 text-xs font-semibold text-gray-500 font-sans">
+            <div className="flex items-center gap-1.5">
+              <span className="w-3.5 h-3.5 rounded bg-emerald-600" />
+              <span>Answered</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3.5 h-3.5 rounded bg-amber-500" />
+              <span>Bookmarked</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3.5 h-3.5 rounded bg-rose-500" />
+              <span>Reported</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3.5 h-3.5 rounded bg-gray-200" />
+              <span>Visited</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3.5 h-3.5 rounded bg-white border border-gray-200" />
+              <span>Not Visited</span>
+            </div>
+          </div>
+
+          {/* Scrolling Palette Grid */}
+          <div className="pt-2">
+            {filteredPaletteIndexes.length === 0 ? (
+              <div className="py-6 text-center text-xs text-gray-400 font-sans">
+                No questions match your active filters.
+              </div>
+            ) : (
+              <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+                {filteredPaletteIndexes.map(({ q, idx }) => {
+                  const isReported = reportedQuestionIds.has(q.id);
+                  return (
+                    <button
+                      key={q.id}
+                      onClick={() => handleJumpQuestion(idx)}
+                      className={`h-9 w-full rounded-lg text-xs font-bold font-mono transition-all flex items-center justify-center relative cursor-pointer ${getPaletteStatusColor(idx)}`}
+                    >
+                      {idx + 1}
+                      {isReported && (
+                        <span className="absolute -top-1 -right-1 w-3 h-3 bg-rose-600 text-white rounded-full flex items-center justify-center text-[8px] font-bold border border-white shadow-xs">
+                          !
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+      {/* Confirmation Modal - CANCEL TEST */}
       {showCancelModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl border border-gray-100 max-w-md w-full p-6 text-center shadow-2xl space-y-4">
@@ -807,6 +870,7 @@ const PracticeTest: React.FC = () => {
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 max-w-lg w-full p-6 relative overflow-hidden">
             
+            {/* Header */}
             <div className="flex justify-between items-start pb-3.5 border-b border-gray-100 mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shrink-0">
@@ -829,6 +893,7 @@ const PracticeTest: React.FC = () => {
               </button>
             </div>
 
+            {/* Question Details Mentioning Question No, Year, Subject */}
             <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 mb-4 space-y-2 text-xs font-sans">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-bold text-slate-800 bg-white px-2.5 py-1 rounded-md border border-slate-200 shadow-2xs">
@@ -846,6 +911,7 @@ const PracticeTest: React.FC = () => {
               </p>
             </div>
 
+            {/* Form */}
             <form onSubmit={handleSubmitReport} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1.5 font-sans">
