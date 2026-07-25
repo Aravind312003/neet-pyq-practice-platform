@@ -7,14 +7,14 @@ import {
 } from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
 
-// Live Render API Base target
+// Target Live Render API Base target
 const API_BASE = 'https://neet-pyq-practice-platform.onrender.com/api';
 
 const PracticeTest: React.FC = () => {
   const { type, id } = useParams<{ type: string; id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { token } = useAuth();
+  const { user, token } = useAuth(); // 🛑 Extract user context to get actual logged-in email
 
   const isReviewMode = new URLSearchParams(location.search).get('mode') === 'review';
 
@@ -80,9 +80,9 @@ const PracticeTest: React.FC = () => {
     setReportError(null);
 
     try {
-      const userEmail = localStorage.getItem('neet_user_email') || 'User';
+      // 🛑 FIX: Prioritize actual authenticated user email over fallback
+      const userEmail = user?.email || localStorage.getItem('neet_user_email') || 'User';
 
-      // Explicit Payload Sanitization for FastAPI Pydantic
       const payload = {
         questionId: activeQuestion?.id ? String(activeQuestion.id) : null,
         questionNumber: Number(currentIndex + 1),
@@ -156,7 +156,6 @@ const PracticeTest: React.FC = () => {
           setCurrentIndex(savedState.currentIndex || 0);
           setIsLoading(false);
         } else {
-          // Fetch fresh questions from API
           let url = '';
           if (type === 'year') {
             url = `${API_BASE}/questions/${id}`;
@@ -208,7 +207,6 @@ const PracticeTest: React.FC = () => {
     initializeTest();
   }, [type, id, token, isReviewMode]);
 
-  // Auto-Save test state to localStorage whenever state changes
   useEffect(() => {
     if (questions.length === 0 || isReviewMode) return;
 
@@ -225,7 +223,6 @@ const PracticeTest: React.FC = () => {
     localStorage.setItem(localKey, JSON.stringify(stateToSave));
   }, [questions, answers, bookmarks, visited, timeLeft, currentIndex, type, id, isReviewMode]);
 
-  // Timer ticker loop
   useEffect(() => {
     if (isLoading || questions.length === 0 || isReviewMode) return;
 
@@ -259,7 +256,6 @@ const PracticeTest: React.FC = () => {
     };
   }, [isLoading, questions, isReviewMode]);
 
-  // Mark current question as visited
   useEffect(() => {
     if (questions.length > 0) {
       setVisited(prev => {

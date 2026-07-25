@@ -48,8 +48,10 @@ async def get_reports(
 ):
     try:
         query = db.table("reports").select("*")
-        if userEmail and userEmail != "User" and userEmail != "undefined":
-            query = query.eq("user_email", userEmail)
+        
+        # 🛑 FIX: Query matches user email OR fallback "User" string so legacy reports load cleanly
+        if userEmail and userEmail not in ["undefined", "null", ""]:
+            query = query.or_(f"user_email.eq.{userEmail},user_email.eq.User")
         
         res = query.order("created_at", desc=True).execute()
         return {"reports": res.data if res.data else []}
