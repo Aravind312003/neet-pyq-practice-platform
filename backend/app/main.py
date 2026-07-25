@@ -7,21 +7,14 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from app.config import settings
-from app.routers import auth, questions, bookmarks
+from app.routers import auth, questions, bookmarks, reports  # Added reports import
 
 limiter = Limiter(key_func=get_remote_address)
-
-app_kwargs = {}
-if settings.ENV == "production":
-    app_kwargs["openapi_url"] = None
-    app_kwargs["docs_url"] = None
-    app_kwargs["redoc_url"] = None
 
 app = FastAPI(
     title="NEET PYQ Practice API Platform",
     description="High-fidelity secure REST services for custom NEET Practice papers",
-    version="1.0.0",
-    **app_kwargs
+    version="1.0.0"
 )
 
 app.state.limiter = limiter
@@ -36,47 +29,22 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     return response
 
-origins = ["https://neet-pyq-practice-platform.web.app"]
-
-if settings.ENV != "production":
-    origins.append("*")
-else:
-    origins.append(os.getenv("APP_URL", "https://localhost:3000"))
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    detail = "An unexpected error occurred. Please try again."
-    if settings.ENV != "production":
-        detail = str(exc)
-        
-    response = JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"error": detail}
-    )
-    
-    origin = request.headers.get("origin")
-    if origin and (origin in origins or "*" in origins):
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-         
-    return response
-
-# Standardized API Prefix Routing Configuration
 app.include_router(auth.router, prefix="/api")
 app.include_router(questions.router, prefix="/api")
 app.include_router(bookmarks.router, prefix="/api")
+app.include_router(reports.router, prefix="/api")  # Registered /api/reports
 
 @app.get("/health", tags=["System"])
 async def health():
-    return {"status": "ok", "environment": settings.ENV}
+    return {"status": "ok"}
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=settings.ENV != "production")
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
