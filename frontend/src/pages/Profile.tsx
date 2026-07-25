@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
 
-// 🛑 Target Live Render Backend directly
+// Live Render API Base target
 const API_BASE = 'https://neet-pyq-practice-platform.onrender.com/api';
 
 interface ReportItem {
@@ -90,7 +90,7 @@ const Profile: React.FC = () => {
           }
         }
 
-        // 2. Fetch Reports
+        // 2. Fetch Reports (With robust email fallback)
         const userEmail = user?.email || localStorage.getItem('neet_user_email') || '';
         const repUrl = userEmail 
           ? `${API_BASE}/reports?userEmail=${encodeURIComponent(userEmail)}`
@@ -115,7 +115,7 @@ const Profile: React.FC = () => {
             createdAt: r.created_at || r.createdAt || new Date().toISOString()
           }));
 
-          // Optionally enrich report entries with full question text details
+          // Enrich report entries with full question text details
           const enrichedReports = await Promise.all(
             mappedReports.map(async (rep) => {
               if (rep.questionId && rep.questionId !== 'N/A') {

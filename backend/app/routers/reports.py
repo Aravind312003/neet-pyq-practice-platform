@@ -49,12 +49,27 @@ async def get_reports(
     try:
         query = db.table("reports").select("*")
         
-        # 🛑 FIX: Query matches user email OR fallback "User" string so legacy reports load cleanly
+        # Match specific user email OR fallback "User" entry so no report is hidden
         if userEmail and userEmail not in ["undefined", "null", ""]:
-            query = query.or_(f"user_email.eq.{userEmail},user_email.eq.User")
+            query = query.or_(f"user_email.eq.{userEmail},user_email.eq.User,user_email.is.null")
         
         res = query.order("created_at", desc=True).execute()
         return {"reports": res.data if res.data else []}
     except Exception as e:
         print(f"Error fetching reports: {e}")
         return {"reports": []}
+
+@router.delete("/{report_id}")
+async def delete_report(
+    report_id: str,
+    db: Client = Depends(get_supabase)
+):
+    try:
+        res = db.table("reports").delete().eq("id", report_id).execute()
+        return {"status": "success", "message": "Report deleted successfully", "data": res.data}
+    except Exception as e:
+        print(f"Error deleting report: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete report: {str(e)}"
+        )
