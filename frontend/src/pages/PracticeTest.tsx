@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
 
-// 🛑 Target Render Backend Directly
+// Live Render API Base target
 const API_BASE = 'https://neet-pyq-practice-platform.onrender.com/api';
 
 const PracticeTest: React.FC = () => {
@@ -81,23 +81,26 @@ const PracticeTest: React.FC = () => {
 
     try {
       const userEmail = localStorage.getItem('neet_user_email') || 'User';
-      // Fixed API endpoint URL
+
+      // Explicit Payload Sanitization for FastAPI Pydantic
+      const payload = {
+        questionId: activeQuestion?.id ? String(activeQuestion.id) : null,
+        questionNumber: Number(currentIndex + 1),
+        year: activeQuestion?.year ? Number(activeQuestion.year) : null,
+        subject: activeQuestion?.subject || null,
+        chapter: activeQuestion?.chapter || null,
+        issueType: reportIssueType,
+        description: reportDescription,
+        userEmail: userEmail
+      };
+
       const response = await fetch(`${API_BASE}/reports`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({
-          questionId: activeQuestion?.id,
-          questionNumber: currentIndex + 1,
-          year: activeQuestion?.year,
-          subject: activeQuestion?.subject,
-          chapter: activeQuestion?.chapter,
-          issueType: reportIssueType,
-          description: reportDescription,
-          userEmail
-        })
+        body: JSON.stringify(payload)
       });
 
       const data = await response.json();
@@ -153,7 +156,7 @@ const PracticeTest: React.FC = () => {
           setCurrentIndex(savedState.currentIndex || 0);
           setIsLoading(false);
         } else {
-          // Fixed API route paths
+          // Fetch fresh questions from API
           let url = '';
           if (type === 'year') {
             url = `${API_BASE}/questions/${id}`;
@@ -205,6 +208,7 @@ const PracticeTest: React.FC = () => {
     initializeTest();
   }, [type, id, token, isReviewMode]);
 
+  // Auto-Save test state to localStorage whenever state changes
   useEffect(() => {
     if (questions.length === 0 || isReviewMode) return;
 
@@ -221,6 +225,7 @@ const PracticeTest: React.FC = () => {
     localStorage.setItem(localKey, JSON.stringify(stateToSave));
   }, [questions, answers, bookmarks, visited, timeLeft, currentIndex, type, id, isReviewMode]);
 
+  // Timer ticker loop
   useEffect(() => {
     if (isLoading || questions.length === 0 || isReviewMode) return;
 
@@ -254,6 +259,7 @@ const PracticeTest: React.FC = () => {
     };
   }, [isLoading, questions, isReviewMode]);
 
+  // Mark current question as visited
   useEffect(() => {
     if (questions.length > 0) {
       setVisited(prev => {
