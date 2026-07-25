@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Question } from '../types';
 import { 
-  User, Mail, Calendar, Bookmark, Trash2, BookOpen, ChevronDown, ChevronUp, AlertCircle, Flag, MessageSquare
+  User, Mail, Calendar, Bookmark, Trash2, ChevronDown, ChevronUp, Flag, MessageSquare
 } from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
+
+// 🛑 Target Live Render Backend directly
+const API_BASE = 'https://neet-pyq-practice-platform.onrender.com/api';
 
 interface ReportItem {
   id: string;
@@ -55,9 +58,9 @@ const Profile: React.FC = () => {
       setIsLoading(true);
 
       try {
-        // Fetch Bookmarks
+        // 1. Fetch Bookmarks
         if (token) {
-          const res = await fetch('/api/bookmarks', {
+          const res = await fetch(`${API_BASE}/bookmarks`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (res.ok) {
@@ -68,10 +71,9 @@ const Profile: React.FC = () => {
             if (ids.length > 0) {
               const questionPromises = ids.map(async (id) => {
                 try {
-                  const qRes = await fetch(`/api/question/${id}`);
+                  const qRes = await fetch(`${API_BASE}/questions/question/${id}`);
                   if (qRes.ok) {
-                    const qData = await qRes.json();
-                    return qData.question;
+                    return await qRes.json();
                   }
                 } catch (err) {
                   console.error(`Failed to fetch question ${id}:`, err);
@@ -88,25 +90,43 @@ const Profile: React.FC = () => {
           }
         }
 
-        // Fetch Reports
+        // 2. Fetch Reports
         const userEmail = user?.email || localStorage.getItem('neet_user_email') || '';
-        const repRes = await fetch(`/api/reports?email=${encodeURIComponent(userEmail)}`);
+        const repUrl = userEmail 
+          ? `${API_BASE}/reports?userEmail=${encodeURIComponent(userEmail)}`
+          : `${API_BASE}/reports`;
+
+        const repRes = await fetch(repUrl);
         if (repRes.ok) {
           const repData = await repRes.json();
-          const rawReports: ReportItem[] = repData.reports || [];
+          const rawReports = repData.reports || [];
 
-          // Optionally fetch question details for each report if missing text
+          // Map database snake_case fields to frontend object keys
+          const mappedReports: ReportItem[] = rawReports.map((r: any) => ({
+            id: r.id || String(Math.random()),
+            questionId: r.question_id || r.questionId || 'N/A',
+            questionNumber: r.question_number || r.questionNumber || 'N/A',
+            year: r.year || 'N/A',
+            subject: r.subject || 'General',
+            chapter: r.chapter || 'N/A',
+            issueType: r.issue_type || r.issueType || 'Issue Report',
+            description: r.description || '',
+            userEmail: r.user_email || r.userEmail || '',
+            createdAt: r.created_at || r.createdAt || new Date().toISOString()
+          }));
+
+          // Optionally enrich report entries with full question text details
           const enrichedReports = await Promise.all(
-            rawReports.map(async (rep) => {
+            mappedReports.map(async (rep) => {
               if (rep.questionId && rep.questionId !== 'N/A') {
                 try {
-                  const qRes = await fetch(`/api/question/${rep.questionId}`);
+                  const qRes = await fetch(`${API_BASE}/questions/question/${rep.questionId}`);
                   if (qRes.ok) {
                     const qData = await qRes.json();
-                    return { ...rep, questionDetails: qData.question };
+                    return { ...rep, questionDetails: qData };
                   }
                 } catch (e) {
-                  // ignore error
+                  // Fallback without full question structure
                 }
               }
               return rep;
@@ -129,7 +149,7 @@ const Profile: React.FC = () => {
     if (!token) return;
     setIsDeleting(id);
     try {
-      const res = await fetch(`/api/bookmark/${id}`, {
+      const res = await fetch(`${API_BASE}/bookmark/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -153,7 +173,7 @@ const Profile: React.FC = () => {
   const handleDeleteReport = async (reportId: string) => {
     setIsDeletingReport(reportId);
     try {
-      const res = await fetch(`/api/reports/${reportId}`, {
+      const res = await fetch(`${API_BASE}/reports/${reportId}`, {
         method: 'DELETE'
       });
 
@@ -171,19 +191,11 @@ const Profile: React.FC = () => {
   };
 
   const toggleExpand = (id: string | number) => {
-    if (expandedId === id) {
-      setExpandedId(null);
-    } else {
-      setExpandedId(id);
-    }
+    setExpandedId(prev => (prev === id ? null : id));
   };
 
   const toggleExpandReport = (reportId: string) => {
-    if (expandedReportId === reportId) {
-      setExpandedReportId(null);
-    } else {
-      setExpandedReportId(reportId);
-    }
+    setExpandedReportId(prev => (prev === reportId ? null : reportId));
   };
 
   return (
@@ -192,19 +204,18 @@ const Profile: React.FC = () => {
         
         {/* Profile Card Header */}
         <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-xs mb-8 flex flex-col sm:flex-row items-center gap-6 relative overflow-hidden">
-          {/* Decorative background shape */}
           <div className="absolute top-0 right-0 transform translate-x-12 -translate-y-12 w-36 h-36 bg-blue-50 rounded-full opacity-40"></div>
 
           <div className="w-16 h-16 rounded-full bg-blue-600 text-white font-black text-xl flex items-center justify-center border-2 border-blue-700 shadow-md">
-            {user?.name.substring(0, 2).toUpperCase()}
+            {user?.name ? user.name.substring(0, 2).toUpperCase() : 'ME'}
           </div>
 
           <div className="text-center sm:text-left relative z-10">
-            <h1 className="text-xl font-bold text-gray-900 font-sans tracking-tight">{user?.name}</h1>
+            <h1 className="text-xl font-bold text-gray-900 font-sans tracking-tight">{user?.name || 'NEET Candidate'}</h1>
             <div className="mt-1.5 flex flex-wrap justify-center sm:justify-start gap-4 text-xs text-gray-500 font-medium">
               <span className="flex items-center gap-1">
                 <Mail className="w-3.5 h-3.5" />
-                {user?.email}
+                {user?.email || localStorage.getItem('neet_user_email') || 'registered@candidate.com'}
               </span>
               <span className="flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5" />
@@ -270,7 +281,6 @@ const Profile: React.FC = () => {
                         isExpanded ? 'ring-1 ring-blue-100 border-blue-200' : ''
                       }`}
                     >
-                      {/* Accordion Trigger Header */}
                       <div 
                         onClick={() => toggleExpand(q.id)}
                         className="p-5 flex items-start gap-4 justify-between cursor-pointer hover:bg-gray-50/50 transition-colors"
@@ -312,15 +322,12 @@ const Profile: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Expandable Body */}
                       {isExpanded && (
                         <div className="px-5 pb-5 pt-1 border-t border-gray-50 space-y-4 bg-gray-50/20">
-                          {/* Question Text */}
                           <div className="text-sm font-semibold text-gray-800 leading-relaxed whitespace-pre-line">
                             {q.question}
                           </div>
 
-                          {/* Options */}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                             {[
                               { key: 'A', text: q.option_a },
@@ -351,7 +358,6 @@ const Profile: React.FC = () => {
                             })}
                           </div>
 
-                          {/* Explanation block */}
                           {q.explanation && (
                             <div className="bg-blue-50/30 border border-blue-50 rounded-xl p-4 text-xs leading-relaxed text-gray-600">
                               <span className="font-bold text-blue-800 font-sans block mb-1">Answer Explanation:</span>
@@ -393,9 +399,7 @@ const Profile: React.FC = () => {
                   const formattedDate = new Date(rep.createdAt).toLocaleDateString('en-US', {
                     month: 'short',
                     day: 'numeric',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
+                    year: 'numeric'
                   });
 
                   return (
@@ -405,13 +409,11 @@ const Profile: React.FC = () => {
                         isExpanded ? 'ring-1 ring-rose-200 border-rose-200' : ''
                       }`}
                     >
-                      {/* Header */}
                       <div 
                         onClick={() => toggleExpandReport(rep.id)}
                         className="p-5 flex items-start gap-4 justify-between cursor-pointer hover:bg-gray-50/50 transition-colors"
                       >
                         <div className="space-y-2 flex-1">
-                          {/* Badges: Question No, Year, Issue Type */}
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-[11px] font-bold font-mono bg-rose-50 text-rose-700 px-2.5 py-0.5 rounded-md border border-rose-100">
                               Question No: Q{rep.questionNumber}
@@ -427,7 +429,6 @@ const Profile: React.FC = () => {
                             </span>
                           </div>
 
-                          {/* Student Description Note */}
                           <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-xs text-slate-800 font-sans leading-relaxed">
                             <div className="flex items-center gap-1.5 text-slate-500 font-bold text-[11px] mb-1">
                               <MessageSquare className="w-3.5 h-3.5 text-rose-500" />
@@ -439,7 +440,6 @@ const Profile: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Actions */}
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-[10px] text-gray-400 hidden sm:inline">
                             {formattedDate}
@@ -467,7 +467,6 @@ const Profile: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Expandable details if available */}
                       {isExpanded && rep.questionDetails && (
                         <div className="px-5 pb-5 pt-2 border-t border-gray-100 bg-slate-50/50 space-y-3">
                           <span className="text-xs font-bold text-gray-700 font-sans block">
@@ -513,4 +512,3 @@ const Profile: React.FC = () => {
 };
 
 export default Profile;
-
