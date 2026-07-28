@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Question } from '../types';
 import { 
-  User, Mail, Calendar, Bookmark, Trash2, ChevronDown, ChevronUp, Flag, MessageSquare
+  User, Mail, Calendar, Bookmark, Trash2, ChevronDown, ChevronUp, Flag, MessageSquare, CheckCircle2, Clock
 } from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
 
@@ -20,6 +20,8 @@ interface ReportItem {
   description: string;
   userEmail: string;
   createdAt: string;
+  status: string; // "Resolved", "In Review", "Pending", or "Dismissed"
+  adminResponse?: string;
   questionDetails?: Question | null;
 }
 
@@ -106,7 +108,9 @@ const Profile: React.FC = () => {
             issueType: r.issue_type || r.issueType || 'Issue Report',
             description: r.description || '',
             userEmail: r.user_email || r.userEmail || '',
-            createdAt: r.created_at || r.createdAt || new Date().toISOString()
+            createdAt: r.created_at || r.createdAt || new Date().toISOString(),
+            status: r.status || 'Pending',
+            adminResponse: r.admin_response || r.adminResponse || r.admin_comment || ''
           }));
 
           setReports(mappedReports);
@@ -195,11 +199,44 @@ const Profile: React.FC = () => {
     setExpandedId(prev => (prev === id ? null : id));
   };
 
+  const renderStatusBadge = (statusStr: string) => {
+    const s = statusStr.toLowerCase();
+    if (s === 'resolved') {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-md border border-emerald-200">
+          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+          Resolved
+        </span>
+      );
+    }
+    if (s === 'in review' || s === 'in_review') {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-md border border-blue-200">
+          <Clock className="w-3 h-3 text-blue-600" />
+          In Review
+        </span>
+      );
+    }
+    if (s === 'dismissed') {
+      return (
+        <span className="text-[11px] font-bold bg-gray-100 text-gray-600 px-2.5 py-0.5 rounded-md border border-gray-200">
+          Dismissed
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-amber-50 text-amber-700 px-2.5 py-0.5 rounded-md border border-amber-200">
+        <Clock className="w-3 h-3 text-amber-600" />
+        Pending
+      </span>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-50/50 pb-16 pt-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* Profile Card Header */}
+        {/* Profile Header */}
         <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-xs mb-8 flex flex-col sm:flex-row items-center gap-6 relative overflow-hidden">
           <div className="absolute top-0 right-0 transform translate-x-12 -translate-y-12 w-36 h-36 bg-blue-50 rounded-full opacity-40"></div>
 
@@ -249,7 +286,7 @@ const Profile: React.FC = () => {
           </button>
         </div>
 
-        {/* Tab 1: Saved Bookmarks List */}
+        {/* Tab 1: Saved Bookmarks */}
         {activeTab === 'bookmarks' && (
           <div>
             {isLoading ? (
@@ -371,7 +408,7 @@ const Profile: React.FC = () => {
           </div>
         )}
 
-        {/* Tab 2: Reported Questions List */}
+        {/* Tab 2: Reported Questions */}
         {activeTab === 'reports' && (
           <div>
             {isLoading ? (
@@ -386,7 +423,7 @@ const Profile: React.FC = () => {
                 </div>
                 <h3 className="text-sm font-bold text-gray-900 font-sans">No reported questions</h3>
                 <p className="mt-1 text-xs text-gray-400 max-w-sm mx-auto leading-relaxed">
-                  When you report errors or answer key issues during practice tests, your reported items and text box comments will appear here.
+                  When you report errors or answer key issues during practice tests, your reported items and status will appear here.
                 </p>
               </div>
             ) : (
@@ -412,12 +449,15 @@ const Profile: React.FC = () => {
                         className="p-5 flex items-start gap-4 justify-between cursor-pointer hover:bg-gray-50/50 transition-colors"
                       >
                         <div className="space-y-2 flex-1">
+                          {/* Badges: Status, Question No, Year, Issue Type */}
                           <div className="flex flex-wrap items-center gap-2">
+                            {renderStatusBadge(rep.status)}
+
                             <span className="text-[11px] font-bold font-mono bg-rose-50 text-rose-700 px-2.5 py-0.5 rounded-md border border-rose-100">
-                              Question No: Q{rep.questionNumber}
+                              Q{rep.questionNumber}
                             </span>
                             <span className="text-[11px] font-bold font-mono bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-md border border-blue-100">
-                              Year: NEET {rep.year}
+                              NEET {rep.year}
                             </span>
                             <span className="text-[11px] font-semibold bg-gray-100 text-gray-700 px-2.5 py-0.5 rounded-md border border-gray-200">
                               {rep.issueType}
@@ -427,6 +467,7 @@ const Profile: React.FC = () => {
                             </span>
                           </div>
 
+                          {/* Student Description Note */}
                           <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-xs text-slate-800 font-sans leading-relaxed">
                             <div className="flex items-center gap-1.5 text-slate-500 font-bold text-[11px] mb-1">
                               <MessageSquare className="w-3.5 h-3.5 text-rose-500" />
@@ -436,6 +477,19 @@ const Profile: React.FC = () => {
                               "{rep.description}"
                             </p>
                           </div>
+
+                          {/* Admin Resolution Response (If populated by admin dashboard) */}
+                          {rep.adminResponse && (
+                            <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-950 font-sans leading-relaxed">
+                              <div className="flex items-center gap-1.5 text-emerald-800 font-bold text-[11px] mb-1">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Admin Resolution Feedback:</span>
+                              </div>
+                              <p className="font-medium whitespace-pre-line">
+                                {rep.adminResponse}
+                              </p>
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">
