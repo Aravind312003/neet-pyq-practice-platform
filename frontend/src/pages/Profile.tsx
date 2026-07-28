@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
 
-// Live Render API Base target
+// Target Live Render Backend directly
 const API_BASE = 'https://neet-pyq-practice-platform.onrender.com/api';
 
 interface ReportItem {
@@ -56,6 +56,42 @@ const Profile: React.FC = () => {
     setShowToast(true);
   };
 
+  // 🔄 Fetch Reports Live directly from Database
+  const fetchLiveReports = async () => {
+    try {
+      const userEmail = user?.email || localStorage.getItem('neet_user_email') || '';
+      const repUrl = userEmail 
+        ? `${API_BASE}/reports?userEmail=${encodeURIComponent(userEmail)}`
+        : `${API_BASE}/reports`;
+
+      const repRes = await fetch(repUrl, { cache: 'no-store' });
+      if (repRes.ok) {
+        const repData = await repRes.json();
+        const rawReports = repData.reports || [];
+
+        const mappedReports: ReportItem[] = rawReports.map((r: any) => ({
+          id: r.id || String(Math.random()),
+          questionId: r.question_id || r.questionId || 'N/A',
+          questionNumber: r.question_number || r.questionNumber || 'N/A',
+          year: r.year || 'N/A',
+          subject: r.subject || 'General',
+          chapter: r.chapter || 'N/A',
+          issueType: r.issue_type || r.issueType || 'Issue Report',
+          description: r.description || '',
+          userEmail: r.user_email || r.userEmail || '',
+          createdAt: r.created_at || r.createdAt || new Date().toISOString(),
+          // Flexible mapping across status field naming conventions
+          status: r.status || r.issue_status || r.resolution_status || 'Pending',
+          adminResponse: r.admin_response || r.adminResponse || r.admin_comment || r.response || ''
+        }));
+
+        setReports(mappedReports);
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch reports live:', err);
+    }
+  };
+
   useEffect(() => {
     const fetchAllData = async () => {
       setIsLoading(true);
@@ -87,34 +123,8 @@ const Profile: React.FC = () => {
           }
         }
 
-        // 2. Fetch Reports instantly
-        const userEmail = user?.email || localStorage.getItem('neet_user_email') || '';
-        const repUrl = userEmail 
-          ? `${API_BASE}/reports?userEmail=${encodeURIComponent(userEmail)}`
-          : `${API_BASE}/reports`;
-
-        const repRes = await fetch(repUrl);
-        if (repRes.ok) {
-          const repData = await repRes.json();
-          const rawReports = repData.reports || [];
-
-          const mappedReports: ReportItem[] = rawReports.map((r: any) => ({
-            id: r.id || String(Math.random()),
-            questionId: r.question_id || r.questionId || 'N/A',
-            questionNumber: r.question_number || r.questionNumber || 'N/A',
-            year: r.year || 'N/A',
-            subject: r.subject || 'General',
-            chapter: r.chapter || 'N/A',
-            issueType: r.issue_type || r.issueType || 'Issue Report',
-            description: r.description || '',
-            userEmail: r.user_email || r.userEmail || '',
-            createdAt: r.created_at || r.createdAt || new Date().toISOString(),
-            status: r.status || 'Pending',
-            adminResponse: r.admin_response || r.adminResponse || r.admin_comment || ''
-          }));
-
-          setReports(mappedReports);
-        }
+        // 2. Fetch Live Reports
+        await fetchLiveReports();
       } catch (err: any) {
         triggerToast(err.message || 'Failed to load details.', 'error');
       } finally {
@@ -124,6 +134,13 @@ const Profile: React.FC = () => {
 
     fetchAllData();
   }, [token, user]);
+
+  // 🚀 Re-fetch live reports whenever user switches to Reported Questions tab
+  useEffect(() => {
+    if (activeTab === 'reports') {
+      fetchLiveReports();
+    }
+  }, [activeTab]);
 
   const toggleExpandReport = async (reportId: string, questionId: string | number) => {
     if (expandedReportId === reportId) {
@@ -200,7 +217,7 @@ const Profile: React.FC = () => {
   };
 
   const renderStatusBadge = (statusStr: string) => {
-    const s = statusStr.toLowerCase();
+    const s = statusStr ? statusStr.toString().toLowerCase().trim() : 'pending';
     if (s === 'resolved') {
       return (
         <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-md border border-emerald-200">
@@ -273,7 +290,7 @@ const Profile: React.FC = () => {
           </div>
         </div>
 
-        {/* Tab Selector: Saved Bookmarks vs Reported Questions */}
+        {/* Tab Selector */}
         <div className="flex border-b border-gray-200 mb-6 gap-6">
           <button
             onClick={() => setActiveTab('bookmarks')}
@@ -458,7 +475,7 @@ const Profile: React.FC = () => {
                         className="p-5 flex items-start gap-4 justify-between cursor-pointer hover:bg-gray-50/50 transition-colors"
                       >
                         <div className="space-y-2 flex-1">
-                          {/* Badges: Status, Question No, Year, Issue Type */}
+                          {/* Badges: Live Status, Question No, Year, Issue Type */}
                           <div className="flex flex-wrap items-center gap-2">
                             {renderStatusBadge(rep.status)}
 
