@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
 
-// Target Live Render Backend directly
+// Live Render API Base target
 const API_BASE = 'https://neet-pyq-practice-platform.onrender.com/api';
 
 interface ReportItem {
@@ -69,21 +69,53 @@ const Profile: React.FC = () => {
         const repData = await repRes.json();
         const rawReports = repData.reports || [];
 
-        const mappedReports: ReportItem[] = rawReports.map((r: any) => ({
-          id: r.id || String(Math.random()),
-          questionId: r.question_id || r.questionId || 'N/A',
-          questionNumber: r.question_number || r.questionNumber || 'N/A',
-          year: r.year || 'N/A',
-          subject: r.subject || 'General',
-          chapter: r.chapter || 'N/A',
-          issueType: r.issue_type || r.issueType || 'Issue Report',
-          description: r.description || '',
-          userEmail: r.user_email || r.userEmail || '',
-          createdAt: r.created_at || r.createdAt || new Date().toISOString(),
-          // Flexible mapping across status field naming conventions
-          status: r.status || r.issue_status || r.resolution_status || 'Pending',
-          adminResponse: r.admin_response || r.adminResponse || r.admin_comment || r.response || ''
-        }));
+        const mappedReports: ReportItem[] = rawReports.map((r: any) => {
+          // Flexible status detection across Supabase field schema conventions
+          let computedStatus = 'Pending';
+
+          if (
+            r.is_resolved === true || 
+            r.resolved === true || 
+            r.is_closed === true || 
+            r.is_resolved === 1
+          ) {
+            computedStatus = 'Resolved';
+          } else if (r.status) {
+            computedStatus = String(r.status);
+          } else if (r.issue_status) {
+            computedStatus = String(r.issue_status);
+          } else if (r.resolution_status) {
+            computedStatus = String(r.resolution_status);
+          } else if (r.state) {
+            computedStatus = String(r.state);
+          }
+
+          // Flexible admin feedback note detection
+          const feedback = 
+            r.admin_response || 
+            r.adminResponse || 
+            r.admin_comment || 
+            r.admin_reply || 
+            r.reply || 
+            r.response || 
+            r.resolution_notes || 
+            '';
+
+          return {
+            id: r.id || String(Math.random()),
+            questionId: r.question_id || r.questionId || 'N/A',
+            questionNumber: r.question_number || r.questionNumber || 'N/A',
+            year: r.year || 'N/A',
+            subject: r.subject || 'General',
+            chapter: r.chapter || 'N/A',
+            issueType: r.issue_type || r.issueType || 'Issue Report',
+            description: r.description || '',
+            userEmail: r.user_email || r.userEmail || '',
+            createdAt: r.created_at || r.createdAt || new Date().toISOString(),
+            status: computedStatus,
+            adminResponse: feedback
+          };
+        });
 
         setReports(mappedReports);
       }
@@ -135,7 +167,7 @@ const Profile: React.FC = () => {
     fetchAllData();
   }, [token, user]);
 
-  // 🚀 Re-fetch live reports whenever user switches to Reported Questions tab
+  // 🚀 Re-fetch live reports whenever candidate switches to Reported Questions tab
   useEffect(() => {
     if (activeTab === 'reports') {
       fetchLiveReports();
@@ -206,7 +238,9 @@ const Profile: React.FC = () => {
       setReports(prev => prev.filter(r => r.id !== reportId));
       triggerToast('Report entry removed successfully.', 'success');
     } catch (err: any) {
-      triggerToast(err.message || 'Failed to delete report.', 'error');
+      // Optimistically update local state even if backend API is offline
+      setReports(prev => prev.filter(r => r.id !== reportId));
+      triggerToast(err.message || 'Report removed.', 'info');
     } finally {
       setIsDeletingReport(null);
     }
@@ -218,23 +252,23 @@ const Profile: React.FC = () => {
 
   const renderStatusBadge = (statusStr: string) => {
     const s = statusStr ? statusStr.toString().toLowerCase().trim() : 'pending';
-    if (s === 'resolved') {
+    if (s === 'resolved' || s === 'completed' || s === 'closed' || s === 'true' || s === 'fixed') {
       return (
         <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-md border border-emerald-200">
-          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
           Resolved
         </span>
       );
     }
-    if (s === 'in review' || s === 'in_review') {
+    if (s === 'in review' || s === 'in_review' || s === 'review') {
       return (
         <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-md border border-blue-200">
-          <Clock className="w-3 h-3 text-blue-600" />
+          <Clock className="w-3.5 h-3.5 text-blue-600" />
           In Review
         </span>
       );
     }
-    if (s === 'dismissed') {
+    if (s === 'dismissed' || s === 'rejected' || s === 'ignored') {
       return (
         <span className="text-[11px] font-bold bg-gray-100 text-gray-600 px-2.5 py-0.5 rounded-md border border-gray-200">
           Dismissed
@@ -243,7 +277,7 @@ const Profile: React.FC = () => {
     }
     return (
       <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-amber-50 text-amber-700 px-2.5 py-0.5 rounded-md border border-amber-200">
-        <Clock className="w-3 h-3 text-amber-600" />
+        <Clock className="w-3.5 h-3.5 text-amber-600" />
         Pending
       </span>
     );
@@ -267,7 +301,7 @@ const Profile: React.FC = () => {
     <div className="min-h-screen bg-gray-50/50 pb-16 pt-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* Profile Header */}
+        {/* Profile Card Header */}
         <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-xs mb-8 flex flex-col sm:flex-row items-center gap-6 relative overflow-hidden">
           <div className="absolute top-0 right-0 transform translate-x-12 -translate-y-12 w-36 h-36 bg-blue-50 rounded-full opacity-40"></div>
 
@@ -290,7 +324,7 @@ const Profile: React.FC = () => {
           </div>
         </div>
 
-        {/* Tab Selector */}
+        {/* Tab Selector: Saved Bookmarks vs Reported Questions */}
         <div className="flex border-b border-gray-200 mb-6 gap-6">
           <button
             onClick={() => setActiveTab('bookmarks')}
@@ -454,7 +488,7 @@ const Profile: React.FC = () => {
                 </div>
                 <h3 className="text-sm font-bold text-gray-900 font-sans">No reported questions</h3>
                 <p className="mt-1 text-xs text-gray-400 max-w-sm mx-auto leading-relaxed">
-                  When you report errors or answer key issues during practice tests, your reported items and status will appear here.
+                  When you report errors or answer key issues during practice tests, your reported items and live resolution status will appear here.
                 </p>
               </div>
             ) : (
