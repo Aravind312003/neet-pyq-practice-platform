@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
 
-// Live Render API Base target
+// Target Live Render Backend directly
 const API_BASE = 'https://neet-pyq-practice-platform.onrender.com/api';
 
 interface ReportItem {
@@ -37,10 +37,11 @@ const Profile: React.FC = () => {
   // States for Reports
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
-  const [isDeletingReport, setIsDeletingReport] = useState<string | null>(null);
+  const [loadingQuestionsMap, setLoadingQuestionsMap] = useState<{ [key: string]: boolean }>({});
   
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState<string | number | null>(null);
+  const [isDeletingReport, setIsDeletingReport] = useState<string | null>(null);
 
   // Toast System
   const [toastMessage, setToastMessage] = useState('');
@@ -58,7 +59,7 @@ const Profile: React.FC = () => {
       setIsLoading(true);
 
       try {
-        // 1. Fetch Bookmarks
+        // 1. Fetch Bookmarks with Bulk Hydration
         if (token) {
           const res = await fetch(`${API_BASE}/bookmarks`, {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -69,28 +70,22 @@ const Profile: React.FC = () => {
             setBookmarks(ids);
 
             if (ids.length > 0) {
-              const questionPromises = ids.map(async (id) => {
-                try {
-                  const qRes = await fetch(`${API_BASE}/questions/question/${id}`);
-                  if (qRes.ok) {
-                    return await qRes.json();
-                  }
-                } catch (err) {
-                  console.error(`Failed to fetch question ${id}:`, err);
-                }
-                return null;
+              const bulkRes = await fetch(`${API_BASE}/questions/bulk`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids })
               });
-
-              const results = await Promise.all(questionPromises);
-              const validQuestions = results.filter((q): q is Question => q !== null);
-              setBookmarkedQuestions(validQuestions);
+              if (bulkRes.ok) {
+                const bulkData = await bulkRes.json();
+                setBookmarkedQuestions(bulkData.questions || []);
+              }
             } else {
               setBookmarkedQuestions([]);
             }
           }
         }
 
-        // 2. Fetch Reports (With robust email fallback)
+        // 2. Fetch Reports instantly
         const userEmail = user?.email || localStorage.getItem('neet_user_email') || '';
         const repUrl = userEmail 
           ? `${API_BASE}/reports?userEmail=${encodeURIComponent(userEmail)}`
@@ -101,7 +96,6 @@ const Profile: React.FC = () => {
           const repData = await repRes.json();
           const rawReports = repData.reports || [];
 
-          // Map database snake_case fields to frontend object keys
           const mappedReports: ReportItem[] = rawReports.map((r: any) => ({
             id: r.id || String(Math.random()),
             questionId: r.question_id || r.questionId || 'N/A',
@@ -115,25 +109,7 @@ const Profile: React.FC = () => {
             createdAt: r.created_at || r.createdAt || new Date().toISOString()
           }));
 
-          // Enrich report entries with full question text details
-          const enrichedReports = await Promise.all(
-            mappedReports.map(async (rep) => {
-              if (rep.questionId && rep.questionId !== 'N/A') {
-                try {
-                  const qRes = await fetch(`${API_BASE}/questions/question/${rep.questionId}`);
-                  if (qRes.ok) {
-                    const qData = await qRes.json();
-                    return { ...rep, questionDetails: qData };
-                  }
-                } catch (e) {
-                  // Fallback without full question structure
-                }
-              }
-              return rep;
-            })
-          );
-
-          setReports(enrichedReports);
+          setReports(mappedReports);
         }
       } catch (err: any) {
         triggerToast(err.message || 'Failed to load details.', 'error');
@@ -144,6 +120,31 @@ const Profile: React.FC = () => {
 
     fetchAllData();
   }, [token, user]);
+
+  const toggleExpandReport = async (reportId: string, questionId: string | number) => {
+    if (expandedReportId === reportId) {
+      setExpandedReportId(null);
+      return;
+    }
+
+    setExpandedReportId(reportId);
+
+    const targetReport = reports.find(r => r.id === reportId);
+    if (targetReport && !targetReport.questionDetails && questionId && questionId !== 'N/A') {
+      setLoadingQuestionsMap(prev => ({ ...prev, [reportId]: true }));
+      try {
+        const qRes = await fetch(`${API_BASE}/questions/question/${questionId}`);
+        if (qRes.ok) {
+          const qData = await qRes.json();
+          setReports(prev => prev.map(r => r.id === reportId ? { ...r, questionDetails: qData } : r));
+        }
+      } catch (e) {
+        console.error('Failed to lazy load question text:', e);
+      } finally {
+        setLoadingQuestionsMap(prev => ({ ...prev, [reportId]: false }));
+      }
+    }
+  };
 
   const handleDeleteBookmark = async (id: string | number) => {
     if (!token) return;
@@ -192,10 +193,6 @@ const Profile: React.FC = () => {
 
   const toggleExpand = (id: string | number) => {
     setExpandedId(prev => (prev === id ? null : id));
-  };
-
-  const toggleExpandReport = (reportId: string) => {
-    setExpandedReportId(prev => (prev === reportId ? null : reportId));
   };
 
   return (
@@ -396,6 +393,7 @@ const Profile: React.FC = () => {
               <div className="space-y-4">
                 {reports.map((rep) => {
                   const isExpanded = expandedReportId === rep.id;
+                  const isFetchingDetails = loadingQuestionsMap[rep.id];
                   const formattedDate = new Date(rep.createdAt).toLocaleDateString('en-US', {
                     month: 'short',
                     day: 'numeric',
@@ -410,7 +408,7 @@ const Profile: React.FC = () => {
                       }`}
                     >
                       <div 
-                        onClick={() => toggleExpandReport(rep.id)}
+                        onClick={() => toggleExpandReport(rep.id, rep.questionId)}
                         className="p-5 flex items-start gap-4 justify-between cursor-pointer hover:bg-gray-50/50 transition-colors"
                       >
                         <div className="space-y-2 flex-1">
@@ -467,28 +465,41 @@ const Profile: React.FC = () => {
                         </div>
                       </div>
 
-                      {isExpanded && rep.questionDetails && (
+                      {isExpanded && (
                         <div className="px-5 pb-5 pt-2 border-t border-gray-100 bg-slate-50/50 space-y-3">
-                          <span className="text-xs font-bold text-gray-700 font-sans block">
-                            Full Question Content:
-                          </span>
-                          <div className="text-xs font-semibold text-gray-800 leading-relaxed whitespace-pre-line bg-white p-3.5 rounded-xl border border-gray-200">
-                            {rep.questionDetails.question}
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            {[
-                              { key: 'A', text: rep.questionDetails.option_a },
-                              { key: 'B', text: rep.questionDetails.option_b },
-                              { key: 'C', text: rep.questionDetails.option_c },
-                              { key: 'D', text: rep.questionDetails.option_d },
-                            ].map(({ key, text }) => (
-                              <div key={key} className="p-2.5 rounded-lg bg-white border border-gray-200 text-xs text-gray-700 flex gap-2">
-                                <span className="font-bold text-gray-500 font-mono">{key}.</span>
-                                <span>{text}</span>
+                          {isFetchingDetails ? (
+                            <div className="py-4 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
+                              <div className="w-4 h-4 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></div>
+                              <span>Loading full question options...</span>
+                            </div>
+                          ) : rep.questionDetails ? (
+                            <>
+                              <span className="text-xs font-bold text-gray-700 font-sans block">
+                                Full Question Content:
+                              </span>
+                              <div className="text-xs font-semibold text-gray-800 leading-relaxed whitespace-pre-line bg-white p-3.5 rounded-xl border border-gray-200">
+                                {rep.questionDetails.question}
                               </div>
-                            ))}
-                          </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {[
+                                  { key: 'A', text: rep.questionDetails.option_a },
+                                  { key: 'B', text: rep.questionDetails.option_b },
+                                  { key: 'C', text: rep.questionDetails.option_c },
+                                  { key: 'D', text: rep.questionDetails.option_d },
+                                ].map(({ key, text }) => (
+                                  <div key={key} className="p-2.5 rounded-lg bg-white border border-gray-200 text-xs text-gray-700 flex gap-2">
+                                    <span className="font-bold text-gray-500 font-mono">{key}.</span>
+                                    <span>{text}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-xs text-gray-400 italic py-1">
+                              Full question details unavailable.
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

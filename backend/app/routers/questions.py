@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, status
-from supabase import create_client, Client
-from typing import List, Optional
+from pydantic import BaseModel
+from typing import List, Optional, Union
 import random
+from supabase import create_client, Client
 from app.config import settings
 from app.schemas.question import (
     QuestionResponse, 
@@ -15,6 +16,22 @@ router = APIRouter(prefix="/questions", tags=["Questions"])
 
 def get_supabase() -> Client:
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+
+class BulkQuestionsRequest(BaseModel):
+    ids: List[Union[str, int]]
+
+@router.post("/bulk")
+async def get_questions_bulk(payload: BulkQuestionsRequest, db: Client = Depends(get_supabase)):
+    try:
+        if not payload.ids:
+            return {"questions": []}
+        
+        string_ids = [str(qid) for qid in payload.ids]
+        res = db.table("neet_questions").select("*").in_("id", string_ids).execute()
+        return {"questions": res.data if res.data else []}
+    except Exception as e:
+        print(f"Error fetching bulk questions: {e}")
+        return {"questions": []}
 
 @router.get("", response_model=PaginatedQuestions)
 async def get_questions(
