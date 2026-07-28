@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
 
-// Target Live Render Backend directly
+// Live Render API Base target
 const API_BASE = 'https://neet-pyq-practice-platform.onrender.com/api';
 
 interface ReportItem {
@@ -232,6 +232,20 @@ const Profile: React.FC = () => {
     );
   };
 
+  const formatDate = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return 'Recently';
+      return d.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    } catch {
+      return 'Recently';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50/50 pb-16 pt-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -431,11 +445,6 @@ const Profile: React.FC = () => {
                 {reports.map((rep) => {
                   const isExpanded = expandedReportId === rep.id;
                   const isFetchingDetails = loadingQuestionsMap[rep.id];
-                  const formattedDate = new Date(rep.createdAt).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric'
-                  });
 
                   return (
                     <div 
@@ -478,7 +487,7 @@ const Profile: React.FC = () => {
                             </p>
                           </div>
 
-                          {/* Admin Resolution Response (If populated by admin dashboard) */}
+                          {/* Admin Resolution Response */}
                           {rep.adminResponse && (
                             <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-950 font-sans leading-relaxed">
                               <div className="flex items-center gap-1.5 text-emerald-800 font-bold text-[11px] mb-1">
@@ -494,7 +503,7 @@ const Profile: React.FC = () => {
 
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-[10px] text-gray-400 hidden sm:inline">
-                            {formattedDate}
+                            {formatDate(rep.createdAt)}
                           </span>
 
                           <button
