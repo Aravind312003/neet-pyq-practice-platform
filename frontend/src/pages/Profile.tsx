@@ -199,7 +199,11 @@ const Profile: React.FC = () => {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Realtime listener connected successfully');
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -277,7 +281,6 @@ const Profile: React.FC = () => {
       setReports(prev => prev.filter(r => r.id !== reportId));
       triggerToast('Report entry removed successfully.', 'success');
     } catch (err: any) {
-      // Optimistically update local state even if backend API is offline
       setReports(prev => prev.filter(r => r.id !== reportId));
       triggerToast(err.message || 'Report removed.', 'info');
     } finally {
@@ -363,7 +366,7 @@ const Profile: React.FC = () => {
           </div>
         </div>
 
-        {/* Tab Selector: Saved Bookmarks vs Reported Questions */}
+        {/* Tab Selector */}
         <div className="flex border-b border-gray-200 mb-6 gap-6">
           <button
             onClick={() => setActiveTab('bookmarks')}
