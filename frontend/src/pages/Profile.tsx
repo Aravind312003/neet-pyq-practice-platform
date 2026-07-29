@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Question } from '../types';
+import { createClient } from '@supabase/supabase-js';
 import { 
   User, Mail, Calendar, Bookmark, Trash2, ChevronDown, ChevronUp, Flag, MessageSquare, CheckCircle2, Clock
 } from 'lucide-react';
@@ -8,6 +9,11 @@ import Toast, { ToastType } from '../components/Toast';
 
 // Live Render API Base target
 const API_BASE = 'https://neet-pyq-practice-platform.onrender.com/api';
+
+// Initialize Supabase Client for Real-time WebSocket Listeners
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://your-supabase-url.supabase.co';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-supabase-anon-key';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 interface ReportItem {
   id: string;
@@ -56,6 +62,56 @@ const Profile: React.FC = () => {
     setShowToast(true);
   };
 
+  // Helper function to map Supabase table rows accurately across field naming conventions
+  const mapReportRow = (r: any): ReportItem => {
+    let rawStatus = (r.status || r.issue_status || r.resolution_status || r.state || '').toString().trim().toLowerCase();
+    
+    let computedStatus = 'Pending';
+
+    if (
+      r.is_resolved === true || 
+      r.resolved === true || 
+      r.is_closed === true || 
+      r.is_resolved === 1 ||
+      rawStatus === 'resolved' ||
+      rawStatus === 'completed' ||
+      rawStatus === 'closed' ||
+      rawStatus === 'fixed'
+    ) {
+      computedStatus = 'Resolved';
+    } else if (rawStatus === 'in review' || rawStatus === 'in_review' || rawStatus === 'review') {
+      computedStatus = 'In Review';
+    } else if (rawStatus === 'dismissed' || rawStatus === 'rejected') {
+      computedStatus = 'Dismissed';
+    }
+
+    const feedback = 
+      r.admin_note ||
+      r.admin_response || 
+      r.adminResponse || 
+      r.admin_comment || 
+      r.admin_reply || 
+      r.reply || 
+      r.response || 
+      r.resolution_notes || 
+      '';
+
+    return {
+      id: r.id || String(Math.random()),
+      questionId: r.question_id || r.questionId || 'N/A',
+      questionNumber: r.question_number || r.questionNumber || 'N/A',
+      year: r.year || 'N/A',
+      subject: r.subject || 'General',
+      chapter: r.chapter || 'N/A',
+      issueType: r.issue_type || r.issueType || 'Issue Report',
+      description: r.description || '',
+      userEmail: r.user_email || r.userEmail || '',
+      createdAt: r.created_at || r.createdAt || new Date().toISOString(),
+      status: computedStatus,
+      adminResponse: feedback
+    };
+  };
+
   // 🔄 Fetch Reports Live directly from Database
   const fetchLiveReports = async () => {
     try {
@@ -68,56 +124,7 @@ const Profile: React.FC = () => {
       if (repRes.ok) {
         const repData = await repRes.json();
         const rawReports = repData.reports || [];
-
-        const mappedReports: ReportItem[] = rawReports.map((r: any) => {
-          // Flexible status detection across Supabase field schema conventions
-          let computedStatus = 'Pending';
-
-          if (
-            r.is_resolved === true || 
-            r.resolved === true || 
-            r.is_closed === true || 
-            r.is_resolved === 1
-          ) {
-            computedStatus = 'Resolved';
-          } else if (r.status) {
-            computedStatus = String(r.status);
-          } else if (r.issue_status) {
-            computedStatus = String(r.issue_status);
-          } else if (r.resolution_status) {
-            computedStatus = String(r.resolution_status);
-          } else if (r.state) {
-            computedStatus = String(r.state);
-          }
-
-          // Flexible admin feedback note detection
-          const feedback = 
-            r.admin_note ||
-            r.admin_response || 
-            r.adminResponse || 
-            r.admin_comment || 
-            r.admin_reply || 
-            r.reply || 
-            r.response || 
-            r.resolution_notes || 
-            '';
-
-          return {
-            id: r.id || String(Math.random()),
-            questionId: r.question_id || r.questionId || 'N/A',
-            questionNumber: r.question_number || r.questionNumber || 'N/A',
-            year: r.year || 'N/A',
-            subject: r.subject || 'General',
-            chapter: r.chapter || 'N/A',
-            issueType: r.issue_type || r.issueType || 'Issue Report',
-            description: r.description || '',
-            userEmail: r.user_email || r.userEmail || '',
-            createdAt: r.created_at || r.createdAt || new Date().toISOString(),
-            status: computedStatus,
-            adminResponse: feedback
-          };
-        });
-
+        const mappedReports = rawReports.map(mapReportRow);
         setReports(mappedReports);
       }
     } catch (err: any) {
@@ -167,6 +174,37 @@ const Profile: React.FC = () => {
 
     fetchAllData();
   }, [token, user]);
+
+  // ⚡ REALTIME WEBSOCKET LISTENER FOR INSTANT ADMIN DASHBOARD SYNC
+  useEffect(() => {
+    const channel = supabase
+      .channel('reports-realtime-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'reports' },
+        (payload) => {
+          if (payload.eventType === 'UPDATE') {
+            const updatedItem = mapReportRow(payload.new);
+            setReports((prevReports) =>
+              prevReports.map((item) =>
+                item.id === updatedItem.id ? { ...item, ...updatedItem } : item
+              )
+            );
+            triggerToast(`Report updated: Status is now ${updatedItem.status}`, 'info');
+          } else if (payload.eventType === 'INSERT') {
+            const newItem = mapReportRow(payload.new);
+            setReports((prev) => [newItem, ...prev]);
+          } else if (payload.eventType === 'DELETE') {
+            setReports((prev) => prev.filter((item) => item.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // 🚀 Re-fetch live reports whenever candidate switches to Reported Questions tab
   useEffect(() => {
