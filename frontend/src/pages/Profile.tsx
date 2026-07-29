@@ -92,6 +92,7 @@ const Profile: React.FC = () => {
 
           // Flexible admin feedback note detection
           const feedback = 
+            r.admin_note ||
             r.admin_response || 
             r.adminResponse || 
             r.admin_comment || 
