@@ -175,7 +175,7 @@ const Profile: React.FC = () => {
     fetchAllData();
   }, [token, user]);
 
-  // ⚡ REALTIME WEBSOCKET LISTENER FOR INSTANT ADMIN DASHBOARD SYNC
+  // ⚡ 1. REALTIME WEBSOCKET LISTENER FOR INSTANT ADMIN DASHBOARD SYNC
   useEffect(() => {
     const channel = supabase
       .channel('reports-realtime-changes')
@@ -209,6 +209,15 @@ const Profile: React.FC = () => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // 🔄 2. AUTOMATIC 3-SECOND BACKGROUND POLLING (Guarantees live status sync without page reloads)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchLiveReports();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [user]);
 
   // 🚀 Re-fetch live reports whenever candidate switches to Reported Questions tab
   useEffect(() => {
@@ -366,7 +375,7 @@ const Profile: React.FC = () => {
           </div>
         </div>
 
-        {/* Tab Selector */}
+        {/* Tab Selector: Saved Bookmarks vs Reported Questions */}
         <div className="flex border-b border-gray-200 mb-6 gap-6">
           <button
             onClick={() => setActiveTab('bookmarks')}
