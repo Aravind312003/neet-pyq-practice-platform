@@ -3,18 +3,18 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Question } from '../types';
 import { 
-  Timer, Bookmark, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, Eye, RotateCcw, XCircle, Flag, X, Send, AlertCircle
+  Timer, Bookmark, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, XCircle, Flag, X, Send, AlertCircle
 } from 'lucide-react';
 import Toast, { ToastType } from '../components/Toast';
 
-// Target Live Render API Base target
+// Live Render API Base target
 const API_BASE = 'https://neet-pyq-practice-platform.onrender.com/api';
 
 const PracticeTest: React.FC = () => {
   const { type, id } = useParams<{ type: string; id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, token } = useAuth(); // 🛑 Extract user context to get actual logged-in email
+  const { user, token } = useAuth();
 
   const isReviewMode = new URLSearchParams(location.search).get('mode') === 'review';
 
@@ -80,7 +80,6 @@ const PracticeTest: React.FC = () => {
     setReportError(null);
 
     try {
-      // 🛑 FIX: Prioritize actual authenticated user email over fallback
       const userEmail = user?.email || localStorage.getItem('neet_user_email') || 'User';
 
       const payload = {
@@ -122,7 +121,7 @@ const PracticeTest: React.FC = () => {
     }
   };
 
-  // Sync Timer and Progress to localStorage on load/refresh
+  // 🚀 Always fetch live questions from Database to guarantee admin edits reflect immediately
   useEffect(() => {
     const initializeTest = async () => {
       setIsLoading(true);
@@ -143,61 +142,66 @@ const PracticeTest: React.FC = () => {
           }
         }
 
+        // Fetch fresh questions from the backend API
+        let url = '';
+        if (type === 'year') {
+          url = `${API_BASE}/questions/${id}`;
+        } else {
+          url = `${API_BASE}/questions/random-test`;
+        }
+
+        const response = await fetch(url, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error('Failed to download practice questions.');
+        }
+
+        const data = await response.json();
+        if (!data.questions || data.questions.length === 0) {
+          throw new Error('No questions returned for this set.');
+        }
+
+        const loadedQuestions = data.questions;
+        setQuestions(loadedQuestions);
+
+        // Restore active user progress (answers & timer) if returning to an ongoing test session
         const localKey = `neet_test_state_${type}_${id}`;
         const savedStateString = localStorage.getItem(localKey);
 
         if (savedStateString) {
-          const savedState = JSON.parse(savedStateString);
-          setQuestions(savedState.questions);
-          setAnswers(savedState.answers);
-          setBookmarks(new Set(savedState.bookmarks));
-          setVisited(new Set(savedState.visited));
-          setTimeLeft(savedState.timeLeft);
-          setCurrentIndex(savedState.currentIndex || 0);
-          setIsLoading(false);
-        } else {
-          let url = '';
-          if (type === 'year') {
-            url = `${API_BASE}/questions/${id}`;
-          } else {
-            url = `${API_BASE}/questions/random-test`;
+          try {
+            const savedState = JSON.parse(savedStateString);
+            setAnswers(savedState.answers || {});
+            setBookmarks(new Set(savedState.bookmarks || []));
+            setVisited(new Set(savedState.visited || [0]));
+            setTimeLeft(savedState.timeLeft ?? 10800);
+            setCurrentIndex(savedState.currentIndex || 0);
+          } catch (e) {
+            console.error('Error parsing saved progress state:', e);
           }
-
-          const response = await fetch(url);
-          if (!response.ok) {
-            throw new Error('Failed to download practice questions.');
-          }
-
-          const data = await response.json();
-          if (!data.questions || data.questions.length === 0) {
-            throw new Error('No questions returned for this set.');
-          }
-
-          const loadedQuestions = data.questions;
-          setQuestions(loadedQuestions);
-          
-          if (token) {
-            try {
-              const bResponse = await fetch(`${API_BASE}/bookmarks`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-              });
-              if (bResponse.ok) {
-                const bData = await bResponse.json();
-                const initialBookmarks = new Set<string | number>();
-                (bData.bookmarks || []).forEach((bid: string | number) => {
-                  if (loadedQuestions.some((q: Question) => q.id.toString() === bid.toString())) {
-                    initialBookmarks.add(bid);
-                  }
-                });
-                setBookmarks(initialBookmarks);
-              }
-            } catch (bErr) {
-              console.error('Failed to pre-fetch bookmarks:', bErr);
-            }
-          }
-
-          setIsLoading(false);
         }
+
+        // Pre-fetch user bookmarks
+        if (token) {
+          try {
+            const bResponse = await fetch(`${API_BASE}/bookmarks`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (bResponse.ok) {
+              const bData = await bResponse.json();
+              const initialBookmarks = new Set<string | number>();
+              (bData.bookmarks || []).forEach((bid: string | number) => {
+                if (loadedQuestions.some((q: Question) => q.id.toString() === bid.toString())) {
+                  initialBookmarks.add(bid);
+                }
+              });
+              setBookmarks(initialBookmarks);
+            }
+          } catch (bErr) {
+            console.error('Failed to pre-fetch bookmarks:', bErr);
+          }
+        }
+
+        setIsLoading(false);
       } catch (err: any) {
         setErrorMessage(err.message || 'Failed to start test.');
         setIsLoading(false);
@@ -207,11 +211,11 @@ const PracticeTest: React.FC = () => {
     initializeTest();
   }, [type, id, token, isReviewMode]);
 
+  // Persist student answers & timer progress without caching stale question text
   useEffect(() => {
     if (questions.length === 0 || isReviewMode) return;
 
     const stateToSave = {
-      questions,
       answers,
       bookmarks: Array.from(bookmarks),
       visited: Array.from(visited),
@@ -221,8 +225,9 @@ const PracticeTest: React.FC = () => {
 
     const localKey = `neet_test_state_${type}_${id}`;
     localStorage.setItem(localKey, JSON.stringify(stateToSave));
-  }, [questions, answers, bookmarks, visited, timeLeft, currentIndex, type, id, isReviewMode]);
+  }, [answers, bookmarks, visited, timeLeft, currentIndex, type, id, isReviewMode, questions.length]);
 
+  // Timer ticker loop
   useEffect(() => {
     if (isLoading || questions.length === 0 || isReviewMode) return;
 
@@ -256,6 +261,7 @@ const PracticeTest: React.FC = () => {
     };
   }, [isLoading, questions, isReviewMode]);
 
+  // Mark current question as visited
   useEffect(() => {
     if (questions.length > 0) {
       setVisited(prev => {
